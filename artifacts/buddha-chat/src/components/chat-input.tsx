@@ -45,7 +45,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
           placeholder="Speak your mind..."
           disabled={disabled}
           autoComplete="off"
-          className="comic-text w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-center text-2xl md:text-3xl py-2 placeholder:text-foreground/40 disabled:opacity-50"
+          className="minimal-input comic-text w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-center text-2xl md:text-3xl py-2 text-foreground disabled:opacity-50"
         />
         {/* Hand-drawn underline */}
         <svg

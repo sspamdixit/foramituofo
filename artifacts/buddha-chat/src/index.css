@@ -284,6 +284,16 @@
   will-change: transform;
 }
 
+/* Minimal input: keep the placeholder fully visible in the same hand-drawn font */
+.minimal-input::placeholder {
+  color: hsl(var(--foreground));
+  opacity: 0.95;
+  font-family: var(--app-font-pencil);
+}
+.minimal-input:focus::placeholder {
+  opacity: 0.55;
+}
+
 /* User-message bubble — softer pastel to contrast with the white "sacred" bubble */
 .user-bubble {
   background: linear-gradient(135deg, hsl(35 80% 92%), hsl(20 75% 88%));

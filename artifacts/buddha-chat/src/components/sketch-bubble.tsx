@@ -4,8 +4,12 @@ import { cn } from "@/lib/utils";
 
 interface SketchBubbleProps {
   children: ReactNode;
-  /** Approximate width of the bubble in px (will scale on small screens). */
-  width?: number;
+  /**
+   * CSS width for the bubble. Accepts a number (px) or any CSS length /
+   * `min()` / `clamp()` expression so the caller can constrain by both
+   * viewport width and viewport height to keep the bubble fully on screen.
+   */
+  width?: number | string;
   /** Color of the sketched stroke. */
   stroke?: string;
   /** Position of the tail along the bottom edge (0..1, 0=left, 1=right). */
@@ -121,7 +125,11 @@ export function SketchBubble({
   return (
     <div
       className={cn("relative", className)}
-      style={{ width, maxWidth: "92vw", aspectRatio: `${aspect}` }}
+      style={{
+        width: typeof width === "number" ? `${width}px` : width,
+        maxWidth: "92vw",
+        aspectRatio: `${aspect}`,
+      }}
     >
       <svg
         ref={svgRef}

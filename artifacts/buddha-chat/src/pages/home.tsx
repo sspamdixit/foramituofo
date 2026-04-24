@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useBuddhaChat } from "@/hooks/use-buddha-chat";
 import { useTypewriter } from "@/hooks/use-typewriter";
@@ -6,6 +6,7 @@ import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { LotusToggle } from "@/components/lotus-toggle";
 import { SketchBubble } from "@/components/sketch-bubble";
+import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
 
 /** Stub for hooking up YouTube/Spotify in the future. */
@@ -24,7 +25,10 @@ function CurrentTeaching({
 }) {
   const { displayed, done } = useTypewriter(text, isLatest);
   return (
-    <SketchBubble width={560}>
+    // Width is bounded by viewport WIDTH and viewport HEIGHT so the bubble
+    // (which has a fixed aspect ratio) never overflows the slot vertically
+    // on short or wide screens. 49vh keeps the bubble height under ~22vh.
+    <SketchBubble width="min(560px, 92vw, 49vh)">
       <span className="break-words">{displayed}</span>
       {isLatest && !done && (
         <span className="inline-block w-[2px] h-[0.9em] bg-foreground/70 align-middle ml-1 animate-pulse" />
@@ -51,6 +55,15 @@ export default function Home() {
     latestBuddha.content.length > 0 &&
     !isTyping &&
     buddhaState !== "thinking";
+
+  // Soft singing-bowl chime each time a new Buddha teaching appears.
+  const chimedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!latestBuddha || latestBuddha.content.length === 0) return;
+    if (chimedIdRef.current === latestBuddha.id) return;
+    chimedIdRef.current = latestBuddha.id;
+    playChime();
+  }, [latestBuddha?.id, latestBuddha?.content.length]);
 
   const togglePreach = () => {
     setPreachMode((prev) => {
