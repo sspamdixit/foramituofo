@@ -2,21 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { type ChatMessage } from "@/hooks/use-buddha-chat";
 import { cn } from "@/lib/utils";
+import { ThoughtBubble } from "@/components/thought-bubble";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
   isTyping: boolean;
+  /** When true, the latest buddha message is rendered elsewhere (above the
+   *  buddha as a thought bubble) and should be skipped here. */
+  hideLatestBuddha?: boolean;
 }
 
 const TYPEWRITER_SPEED_MS = 28;
 
-function useTypewriter(text: string, animate: boolean) {
+export function useTypewriter(text: string, animate: boolean) {
   const [displayed, setDisplayed] = useState(animate ? "" : text);
   const textRef = useRef(text);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Keep the latest target text in a ref so the interval always sees it
-  // even as the stream extends `text` over time.
   useEffect(() => {
     textRef.current = text;
   }, [text]);
@@ -31,20 +33,13 @@ function useTypewriter(text: string, animate: boolean) {
       return;
     }
 
-    // If the target text no longer starts with what we've shown (a brand-new
-    // message), reset back to empty. Otherwise keep extending from where we
-    // are so the typewriter chases the streamed text.
     setDisplayed((prev) => (text.startsWith(prev) ? prev : ""));
 
     if (intervalRef.current) return;
     intervalRef.current = setInterval(() => {
       setDisplayed((prev) => {
         const target = textRef.current;
-        if (prev.length >= target.length) {
-          // Caught up — wait for more tokens (don't kill the interval; the
-          // stream might extend `target` shortly).
-          return prev;
-        }
+        if (prev.length >= target.length) return prev;
         return target.slice(0, prev.length + 1);
       });
     }, TYPEWRITER_SPEED_MS);
@@ -60,47 +55,20 @@ function useTypewriter(text: string, animate: boolean) {
   return { displayed, done: displayed.length >= text.length };
 }
 
-function BuddhaSpeechBubble({
-  text,
-  animate,
-  isStreaming,
-}: {
-  text: string;
-  animate: boolean;
-  isStreaming: boolean;
-}) {
-  const { displayed, done } = useTypewriter(text, animate);
-  const showCursor = animate && (isStreaming || !done);
-
+function HistoryBuddhaBubble({ text }: { text: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.6, y: 12 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 260, damping: 18 }}
-      className="relative inline-block max-w-[28rem] min-w-[11rem]"
-      style={{
-        backgroundImage: `url(${import.meta.env.BASE_URL}bubble.png)`,
-        backgroundSize: "100% 100%",
-        backgroundRepeat: "no-repeat",
-        filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.18))",
-      }}
-    >
-      <div className="px-10 pt-7 pb-20 text-foreground text-base md:text-lg leading-snug font-medium break-words">
-        {displayed}
-        {showCursor && (
-          <span className="inline-block w-[2px] h-[1em] bg-foreground/70 align-middle ml-0.5 animate-pulse" />
-        )}
-      </div>
-    </motion.div>
+    <ThoughtBubble size="sm">
+      <div className="break-words">{text}</div>
+    </ThoughtBubble>
   );
 }
 
-export function ChatMessageList({ messages, isTyping }: ChatMessageListProps) {
-  if (messages.length === 0 && !isTyping) {
-    return null;
-  }
-
-  // Find the index of the last buddha message — only that one animates.
+export function ChatMessageList({
+  messages,
+  isTyping,
+  hideLatestBuddha = false,
+}: ChatMessageListProps) {
+  // Find the index of the last buddha message
   let lastBuddhaIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "buddha") {
@@ -109,10 +77,16 @@ export function ChatMessageList({ messages, isTyping }: ChatMessageListProps) {
     }
   }
 
+  const visible = hideLatestBuddha
+    ? messages.filter((_, idx) => idx !== lastBuddhaIdx)
+    : messages;
+
+  if (visible.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-5 py-4 px-2 md:px-8 w-full max-w-2xl mx-auto">
       <AnimatePresence initial={false}>
-        {messages.map((msg, idx) => (
+        {visible.map((msg) => (
           <motion.div
             key={msg.id}
             layout
@@ -126,33 +100,15 @@ export function ChatMessageList({ messages, isTyping }: ChatMessageListProps) {
             )}
           >
             {msg.role === "user" ? (
-              <div className="px-5 py-3 rounded-2xl max-w-[85%] shadow-sm text-base leading-relaxed bg-white/95 text-foreground rounded-br-sm">
+              <div className="px-5 py-3 rounded-2xl max-w-[85%] shadow-sm text-base leading-relaxed bg-white/95 text-foreground rounded-br-sm font-sans">
                 {msg.content}
               </div>
             ) : (
-              <BuddhaSpeechBubble
-                text={msg.content}
-                animate={idx === lastBuddhaIdx}
-                isStreaming={!!msg.isStreaming}
-              />
+              <HistoryBuddhaBubble text={msg.content} />
             )}
           </motion.div>
         ))}
       </AnimatePresence>
-
-      {isTyping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex justify-start w-full"
-        >
-          <div className="px-5 py-3 text-white/85 text-sm tracking-wide">
-            <span className="inline-block w-2 h-2 rounded-full bg-white/85 mr-1 animate-bounce [animation-delay:-0.3s]" />
-            <span className="inline-block w-2 h-2 rounded-full bg-white/85 mr-1 animate-bounce [animation-delay:-0.15s]" />
-            <span className="inline-block w-2 h-2 rounded-full bg-white/85 animate-bounce" />
-          </div>
-        </motion.div>
-      )}
     </div>
   );
 }
