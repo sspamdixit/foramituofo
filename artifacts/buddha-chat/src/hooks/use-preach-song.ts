@@ -130,6 +130,18 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
   // the API (and without repicking a random new song).
   const queuedSongRef = useRef<PreachSong | null>(null);
 
+  // ── Pre-warm the YouTube iframe API on mount ──
+  // Loading the YT script + waiting for `onYouTubeIframeAPIReady` takes
+  // 1-3s on first call. If we leave it for the moment the user clicks
+  // Begin, that latency eats most of the browser's user-activation
+  // window (~5s) and `playVideo()` ends up silently autoplay-blocked.
+  // Kicking the load off at mount means by the time the user taps,
+  // `window.YT` is already there and player creation is synchronous.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    void loadYouTubeApi();
+  }, []);
+
   // ── Fetch a new song whenever enabled flips on, or skip is called ──
   useEffect(() => {
     if (!enabled) {
