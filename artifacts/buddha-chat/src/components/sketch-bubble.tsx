@@ -122,6 +122,13 @@ export function SketchBubble({
 
   const aspect = VIEWBOX_W / VIEWBOX_H;
 
+  // Horizontal offset (as a fraction of bubble width) needed so the tail TIP
+  // — not the bubble center — lands at the bubble container's horizontal
+  // midpoint. That way, when the bubble is centered in its layout slot, the
+  // tail itself sits over the focal target (Buddha) rather than the body.
+  const tailTipFraction = tailX + 24 / VIEWBOX_W;
+  const tailOffsetPct = (tailTipFraction - 0.5) * 100; // positive => tip right of center
+
   return (
     <div
       className={cn("relative", className)}
@@ -129,6 +136,8 @@ export function SketchBubble({
         width: typeof width === "number" ? `${width}px` : width,
         maxWidth: "92vw",
         aspectRatio: `${aspect}`,
+        // Shift left so the tail tip is centered on the slot.
+        transform: `translateX(${-tailOffsetPct}%)`,
         // Container query context so the text + padding can scale with the
         // bubble's actual rendered width, not just viewport breakpoints.
         containerType: "inline-size",
@@ -144,9 +153,11 @@ export function SketchBubble({
       <div
         className="absolute inset-0 flex items-center justify-center text-center"
         style={{
-          // Padding scales with bubble width via container-query units.
-          paddingTop: `${(14 / VIEWBOX_H) * 100}%`,
-          paddingBottom: `${((VIEWBOX_H - BODY_BOTTOM) / VIEWBOX_H) * 100 + 4}%`,
+          // Symmetric padding on the BODY only — the tail occupies the bottom
+          // strip but the text should be centered on the body, not the whole
+          // SVG. This makes the text sit visually in the middle of the box.
+          paddingTop: `${(18 / VIEWBOX_H) * 100}%`,
+          paddingBottom: `${((VIEWBOX_H - BODY_BOTTOM) / VIEWBOX_H) * 100 + (18 / VIEWBOX_H) * 100}%`,
           paddingLeft: "7cqi",
           paddingRight: "7cqi",
         }}
