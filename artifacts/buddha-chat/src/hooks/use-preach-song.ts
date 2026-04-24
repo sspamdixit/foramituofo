@@ -84,9 +84,18 @@ function saveOffset(videoId: string, offset: number) {
 }
 
 /**
- * usePreachSong — when `enabled`, fetches a random song from /api/preach/song,
- * spins up a hidden YouTube player to play it, and exposes the lyric line
- * that's currently being sung along with playback controls.
+ * usePreachSong — when `enabled`, fetches a random song from /api/preach/song
+ * and pre-loads its lyrics + metadata. When `started` is also true, spins
+ * up a hidden YouTube player and begins audio playback.
+ *
+ * The split lets a caller pre-fetch the first song (lyrics, art, videoId)
+ * during a "click to begin" greeting overlay, so audio starts almost
+ * instantly the moment the user taps to enter — and the YT player itself
+ * is only created from inside the user-gesture handler, satisfying every
+ * browser's autoplay policy without us having to do anything else.
+ *
+ * `started` defaults to `true` so existing call sites that don't gate on
+ * a user gesture keep their current behavior.
  *
  * Lyrics drift fix: the LRC timestamps from lrclib are aligned to the album
  * track, while a YouTube video may have a different intro length. The caller
@@ -96,7 +105,7 @@ function saveOffset(videoId: string, offset: number) {
  * Tear-down (player destroy + state reset) happens automatically when
  * `enabled` flips back to false.
  */
-export function usePreachSong(enabled: boolean) {
+export function usePreachSong(enabled: boolean, started: boolean = true) {
   const [song, setSong] = useState<PreachSong | null>(null);
   const [currentLine, setCurrentLine] = useState<string>("");
   const [status, setStatus] = useState<
@@ -179,9 +188,14 @@ export function usePreachSong(enabled: boolean) {
     };
   }, [enabled, songNonce]);
 
-  // ── Spin up YouTube player when we have a song ──
+  // ── Spin up YouTube player when we have a song AND user has started ──
+  // We deliberately wait for `started` so the YT.Player gets created from
+  // inside the user-gesture stack of a real click handler — that's what
+  // satisfies browser autoplay policies. Without this gate, a fresh page
+  // load would create the player, hit a silent autoplay block, surface as
+  // a YT error, and our error handler would spin trying new songs forever.
   useEffect(() => {
-    if (!enabled || !song) {
+    if (!enabled || !started || !song) {
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
@@ -263,7 +277,7 @@ export function usePreachSong(enabled: boolean) {
         playerRef.current = null;
       }
     };
-  }, [enabled, song?.videoId]);
+  }, [enabled, started, song?.videoId]);
 
   // ── Lyric sync loop ──
   // Content-aware alignment: a line is the "current line" from its

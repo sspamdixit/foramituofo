@@ -7,6 +7,7 @@ import { usePreachSong } from "@/hooks/use-preach-song";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { PreachPlayer } from "@/components/preach-player";
+import { GreetingOverlay } from "@/components/greeting-overlay";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
 import { VibeBackground, getVibeTextColor, getVibeAccents } from "@/components/vibe-background";
@@ -146,6 +147,11 @@ function pickRandom<T>(arr: T[], avoid?: T): T {
 export default function Home() {
   const { messages, buddhaState, sendMessage, isTyping, setBuddhaStateOverride } =
     useBuddhaChat();
+  // Gate everything behind a click-to-begin overlay. Until `started` is
+  // true, the YT player isn't created and audio can't play (which also
+  // dodges browser autoplay blocks). The first song is still pre-fetched
+  // in the background so audio kicks in almost instantly on tap.
+  const [started, setStarted] = useState(false);
   const [userTyping, setUserTyping] = useState(false);
   const [override, setOverride] = useState<OverrideBubble | null>(null);
   const [showFlash, setShowFlash] = useState(false);
@@ -170,7 +176,7 @@ export default function Home() {
     nudgeSync: nudgePreachSync,
     seekTo: seekPreachTo,
     seekBy: seekPreachBy,
-  } = usePreachSong(true);
+  } = usePreachSong(true, started);
 
   // True while a song is actively playing audio (not paused / loading / error).
   const musicPlaying = preachStatus === "playing";
@@ -519,6 +525,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Click-to-begin overlay. Renders above everything else; tapping
+          anywhere flips `started` and the music hook spins the YT player
+          up from inside that user-gesture frame so audio actually plays. */}
+      <AnimatePresence>
+        {!started && (
+          <GreetingOverlay
+            key="greeting"
+            onStart={() => setStarted(true)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
