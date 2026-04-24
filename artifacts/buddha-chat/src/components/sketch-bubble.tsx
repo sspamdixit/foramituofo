@@ -1,4 +1,10 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import rough from "roughjs";
 import { cn } from "@/lib/utils";
 
@@ -6,8 +12,8 @@ interface SketchBubbleProps {
   children: ReactNode;
   /**
    * CSS width for the bubble. Accepts a number (px) or any CSS length /
-   * `min()` / `clamp()` expression so the caller can constrain by both
-   * viewport width and viewport height to keep the bubble fully on screen.
+   * `min()` / `clamp()` expression. The bubble's HEIGHT grows with the text
+   * content, so this only constrains horizontal size.
    */
   width?: number | string;
   /** Color of the sketched stroke. */
@@ -17,10 +23,13 @@ interface SketchBubbleProps {
   className?: string;
 }
 
-const VIEWBOX_W = 540;
-const VIEWBOX_H = 240;
-const BODY_BOTTOM = 200;
 const TREMBLE_INTERVAL_MS = 140;
+// How far the tail extends below the bubble body, in pixels.
+const TAIL_EXTRA = 36;
+// Vertical breathing room above and below the text inside the body.
+const BODY_PAD_Y = 18;
+// Minimum height for the body (so 1-word answers don't look cramped).
+const BODY_MIN_H = 96;
 
 export function SketchBubble({
   children,
@@ -29,11 +38,37 @@ export function SketchBubble({
   tailX = 0.62,
   className,
 }: SketchBubbleProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
+  // Measure the container; height auto-sizes to its text content.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setSize({ w: r.width, h: r.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Redraw the rough bubble whenever size or styling changes.
   useEffect(() => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg || size.w < 4 || size.h < 4) return;
+
+    const W = size.w;
+    const H = size.h;
+    const bodyTop = 4;
+    const bodyLeft = 4;
+    const bodyRight = W - 4;
+    const bodyBottom = H - TAIL_EXTRA;
+    if (bodyBottom <= bodyTop + 8) return;
+    const r = Math.min(28, (bodyBottom - bodyTop) * 0.3);
 
     const baseSeed = Math.floor(Math.random() * 10_000);
     let frame = 0;
@@ -51,34 +86,28 @@ export function SketchBubble({
         strokeWidth: 2.4,
         seed: baseSeed + frame,
       };
-
       const fillOpts = {
         ...opts,
         fill: "#ffffff",
         fillStyle: "solid",
       };
 
-      const cx = VIEWBOX_W * tailX;
+      const cx = W * tailX;
       const tipX = cx + 24;
 
-      const bodyTop = 18;
-      const bodyLeft = 24;
-      const bodyRight = VIEWBOX_W - 24;
-      const bodyBottom = BODY_BOTTOM;
-
-      // Tail: a small triangle dropping below the bubble toward Buddha.
+      // Tail: tip lands at the very bottom of the SVG so the wrapper can
+      // anchor it precisely above Buddha's head.
       const tail = rc.polygon(
         [
           [cx - 22, bodyBottom - 8],
-          [tipX, bodyBottom + 36],
+          [tipX, H - 4],
           [cx + 28, bodyBottom - 8],
         ],
         fillOpts,
       );
       svg.appendChild(tail);
 
-      // Bubble body (rounded rect drawn with rough's path for hand-drawn feel).
-      const r = 32;
+      // Bubble body — rounded rect drawn as a hand-drawn path.
       const path = [
         `M ${bodyLeft + r} ${bodyTop}`,
         `L ${bodyRight - r} ${bodyTop}`,
@@ -94,7 +123,7 @@ export function SketchBubble({
       const body = rc.path(path, fillOpts);
       svg.appendChild(body);
 
-      // Cover the seam between bubble and tail with a small white fill stroke.
+      // White cover for the tail/body seam.
       const cover = rc.line(cx - 18, bodyBottom, cx + 24, bodyBottom, {
         ...opts,
         stroke: "#ffffff",
@@ -114,64 +143,64 @@ export function SketchBubble({
 
     draw();
     raf = requestAnimationFrame(tick);
-
     return () => {
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [stroke, tailX]);
+  }, [size.w, size.h, stroke, tailX]);
 
-  const aspect = VIEWBOX_W / VIEWBOX_H;
-
-  // Horizontal offset (as a fraction of bubble width) needed so the tail TIP
-  // — not the bubble center — lands at the bubble container's horizontal
-  // midpoint. That way, when the bubble is centered in its layout slot, the
-  // tail itself sits over the focal target (Buddha) rather than the body.
-  const tailTipFraction = tailX + 24 / VIEWBOX_W;
-  const tailOffsetPct = (tailTipFraction - 0.5) * 100; // positive => tip right of center
+  // Shift the whole bubble LEFT so the tail TIP — not the bubble center —
+  // sits at the container's horizontal midpoint. Tail tip's x within the
+  // bubble = tailX * W + 24, so the shift required = (tailX - 0.5) * W + 24.
+  // Expressed in CSS: percentage of own width (for the variable part) plus a
+  // fixed pixel offset (for the +24 tip overhang). This is exact at every
+  // viewport without depending on JS measurement timing.
+  const tailShiftPct = (tailX - 0.5) * 100; // e.g. 12 when tailX=0.62
+  const transform = `translateX(calc(${-tailShiftPct}% - 24px))`;
 
   return (
     <div
-      className={cn("relative", className)}
+      ref={containerRef}
+      className={cn("relative inline-block", className)}
       style={{
         width: typeof width === "number" ? `${width}px` : width,
         maxWidth: "92vw",
-        aspectRatio: `${aspect}`,
-        // Shift left so the tail tip is centered on the slot.
-        transform: `translateX(${-tailOffsetPct}%)`,
-        // Container query context so the text + padding can scale with the
-        // bubble's actual rendered width, not just viewport breakpoints.
+        transform,
+        // Container query context so text padding scales with bubble width.
         containerType: "inline-size",
       }}
     >
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="absolute inset-0 w-full h-full overflow-visible"
+        width={size.w || 1}
+        height={size.h || 1}
+        viewBox={`0 0 ${size.w || 1} ${size.h || 1}`}
+        preserveAspectRatio="none"
+        className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
         aria-hidden="true"
       />
+      {/*
+        Text is in normal flow, so the container's height grows with the
+        content. Padding top == padding bottom (above the tail), so the text
+        sits exactly in the middle of the BODY rectangle, regardless of how
+        many lines it wraps to.
+      */}
       <div
-        className="absolute inset-0 flex items-center justify-center text-center"
+        className="relative comic-text text-center break-words"
         style={{
-          // Symmetric padding on the BODY only — the tail occupies the bottom
-          // strip but the text should be centered on the body, not the whole
-          // SVG. This makes the text sit visually in the middle of the box.
-          paddingTop: `${(18 / VIEWBOX_H) * 100}%`,
-          paddingBottom: `${((VIEWBOX_H - BODY_BOTTOM) / VIEWBOX_H) * 100 + (18 / VIEWBOX_H) * 100}%`,
+          paddingTop: `${BODY_PAD_Y}px`,
+          paddingBottom: `${BODY_PAD_Y + TAIL_EXTRA}px`,
           paddingLeft: "7cqi",
           paddingRight: "7cqi",
+          fontSize: "clamp(0.95rem, 6.8cqi, 1.85rem)",
+          lineHeight: 1.25,
+          minHeight: `${BODY_MIN_H + TAIL_EXTRA}px`,
+          // Center text within the min-height when the message is short.
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
-        <div
-          className="comic-text leading-tight max-w-full break-words"
-          style={{
-            // ~7% of the bubble width, clamped so the smallest bubbles still
-            // read clearly and the largest ones don't go cartoonishly huge.
-            fontSize: "clamp(0.95rem, 6.8cqi, 1.85rem)",
-          }}
-        >
-          {children}
-        </div>
+        <span className="block max-w-full">{children}</span>
       </div>
     </div>
   );

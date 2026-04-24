@@ -45,6 +45,15 @@ export default function Home() {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "buddha") return messages[i];
     }
+    if (typeof window !== "undefined" && window.location.search.includes("demo=1")) {
+      return {
+        id: "demo",
+        role: "buddha" as const,
+        content: "Hello. May your mind be at ease this moment.",
+        createdAt: new Date(),
+        isStreaming: false,
+      };
+    }
     return null;
   }, [messages]);
 
@@ -116,42 +125,48 @@ export default function Home() {
       </div>
 
       {/*
-        CINEMATIC stack: bubble + Buddha travel together as a single centered
-        unit so the bubble's tail always lands just above his head, no matter
-        the viewport size. A reserved bubble slot keeps Buddha from jumping
-        when the bubble appears or disappears.
+        Buddha is the visual anchor — he stays centered in the viewport. The
+        bubble is absolutely positioned above his head, so its tail TIP always
+        lines up with the top of his head regardless of viewport size or how
+        tall the bubble grows to fit text.
       */}
       <div
         className={cn(
-          "absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none px-4 pb-24",
+          "absolute inset-0 z-20 flex items-center justify-center pointer-events-none px-4 pb-24",
           "buddha-fade-in",
         )}
       >
-        {/* Reserved bubble slot — items-end so the tail hugs Buddha's head.
-            Strong negative margin closes the visual gap between the tail tip
-            and the top of Buddha's head (his PNG has transparent padding). */}
-        <div className="w-full max-w-[560px] flex items-end justify-center h-[26vh] min-h-[140px] max-h-[260px] mb-[-7vh]">
-          <AnimatePresence mode="wait">
-            {showBubble && latestBuddha && (
-              <motion.div
-                key={latestBuddha.id}
-                initial={{ opacity: 0, y: -8, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.45 } }}
-                transition={{ duration: 0.7, ease: "easeOut" }}
-                className="w-full flex justify-center"
-              >
-                <CurrentTeaching
-                  text={latestBuddha.content}
-                  isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        <div className="relative">
+          {/* Bubble: bottom edge sits just above Buddha's head crown.
+              `bottom: 88%` accounts for the transparent padding above his head
+              in the PNG sprite. The wrapper's left:50% + -translate-x-1/2
+              centers the bubble container on Buddha's vertical axis; inside
+              the bubble, the tail tip is itself shifted to that same axis. */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 flex justify-center"
+            style={{ bottom: "88%" }}
+          >
+            <AnimatePresence mode="wait">
+              {showBubble && latestBuddha && (
+                <motion.div
+                  key={latestBuddha.id}
+                  initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.45 } }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                >
+                  <CurrentTeaching
+                    text={latestBuddha.content}
+                    isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-        {/* Buddha — focal centerpoint, sized via vmin so he never crowds the bubble */}
-        <BuddhaSprite state={buddhaState} preachMode={preachMode} size="xl" />
+          {/* Buddha — focal centerpoint, sized via vmin so he scales with the viewport. */}
+          <BuddhaSprite state={buddhaState} preachMode={preachMode} size="xl" />
+        </div>
       </div>
 
       {/* MINIMAL INPUT — single elegant line, hand-drawn underline, bottom-center */}
