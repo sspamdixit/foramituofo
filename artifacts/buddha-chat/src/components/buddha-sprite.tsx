@@ -11,7 +11,6 @@ const SPRITE_MAP: Record<BuddhaState, string> = {
   refusing: `${import.meta.env.BASE_URL}refusing.png`,
 };
 
-// "quiet" / "talking" pair used to fake mouth movement during speech.
 const QUIET_SRC = SPRITE_MAP.idle;
 const TALKING_SRC = SPRITE_MAP.speaking;
 
@@ -50,28 +49,32 @@ export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaS
 
   return (
     <div className={cn("relative flex items-center justify-center", SIZE_CLASSES[size])}>
-      {/* Subtle aura — warmer/larger when preaching */}
+      {/* Soft, blurred halo — pulses slowly during preach mode */}
       <motion.div
         className={cn(
-          "absolute inset-0 rounded-full blur-3xl",
-          preachMode ? "bg-amber-300/50" : "bg-primary/10 dark:bg-primary/20",
+          "absolute inset-0 rounded-full",
+          preachMode
+            ? "halo-pulse bg-amber-200/60 blur-[60px]"
+            : "blur-3xl bg-primary/10 dark:bg-primary/20",
         )}
-        animate={{
-          scale:
-            state === "speaking"
-              ? [1, 1.2, 1]
-              : state === "thinking"
-                ? [1, 1.05, 1]
-                : 1,
-          opacity:
-            state === "speaking"
-              ? [0.5, 0.8, 0.5]
-              : state === "thinking"
-                ? [0.3, 0.5, 0.3]
-                : preachMode
-                  ? [0.4, 0.7, 0.4]
-                  : 0.3,
-        }}
+        animate={
+          preachMode
+            ? undefined
+            : {
+                scale:
+                  state === "speaking"
+                    ? [1, 1.2, 1]
+                    : state === "thinking"
+                      ? [1, 1.05, 1]
+                      : 1,
+                opacity:
+                  state === "speaking"
+                    ? [0.5, 0.8, 0.5]
+                    : state === "thinking"
+                      ? [0.3, 0.5, 0.3]
+                      : 0.3,
+              }
+        }
         transition={{
           duration: state === "speaking" ? 2 : 3,
           repeat: Infinity,
@@ -79,18 +82,8 @@ export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaS
         }}
       />
 
-      {/* Inner wrapper: handles bobbing + breathing */}
-      <motion.div
-        className="buddha-breathe relative z-10 w-full h-full"
-        animate={{
-          y: state === "thinking" ? [0, -5, 0] : [0, -2, 0],
-        }}
-        transition={{
-          duration: state === "thinking" ? 2 : 4,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      >
+      {/* Sprite — no breathing animation, just a subtle bob while thinking. */}
+      <div className="relative z-10 w-full h-full">
         <img
           src={src}
           alt={`Buddha in ${state} state`}
@@ -100,25 +93,7 @@ export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaS
           )}
           draggable={false}
         />
-      </motion.div>
-
-      {/* Floating particle when actively speaking */}
-      {state === "speaking" && (
-        <motion.div
-          className="absolute -top-10 left-1/2 w-4 h-4 bg-primary/30 rounded-full blur-sm"
-          animate={{
-            y: [-20, -100],
-            x: [0, 20],
-            opacity: [0, 0.8, 0],
-            scale: [1, 0.5],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeOut",
-          }}
-        />
-      )}
+      </div>
     </div>
   );
 }

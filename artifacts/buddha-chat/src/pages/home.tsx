@@ -1,32 +1,56 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useBuddhaChat } from "@/hooks/use-buddha-chat";
+import { useTypewriter } from "@/hooks/use-typewriter";
 import { BuddhaSprite } from "@/components/buddha-sprite";
-import { ChatMessageList } from "@/components/chat-message-list";
 import { ChatInput } from "@/components/chat-input";
 import { LotusToggle } from "@/components/lotus-toggle";
+import { SketchBubble } from "@/components/sketch-bubble";
 import { cn } from "@/lib/utils";
 
 /** Stub for hooking up YouTube/Spotify in the future. */
 function playPreachMusic(active: boolean) {
-  // TODO: integrate with YouTube IFrame Player API or Spotify Web Playback SDK.
-  // For now we just log so the wiring is visible.
   // eslint-disable-next-line no-console
   console.info(`[playPreachMusic] preach mode is now ${active ? "ON" : "OFF"}`);
 }
 
+/** Renders the latest Buddha message inside the sketch bubble, with typewriter. */
+function CurrentTeaching({
+  text,
+  isLatest,
+}: {
+  text: string;
+  isLatest: boolean;
+}) {
+  const { displayed, done } = useTypewriter(text, isLatest);
+  return (
+    <SketchBubble width={560}>
+      <span className="break-words">{displayed}</span>
+      {isLatest && !done && (
+        <span className="inline-block w-[2px] h-[0.9em] bg-foreground/70 align-middle ml-1 animate-pulse" />
+      )}
+    </SketchBubble>
+  );
+}
+
 export default function Home() {
   const { messages, buddhaState, sendMessage, isTyping } = useBuddhaChat();
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [preachMode, setPreachMode] = useState(false);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+  const latestBuddha = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "buddha") return messages[i];
     }
-  }, [messages, isTyping]);
+    return null;
+  }, [messages]);
+
+  // Single-bubble logic: while Buddha is "thinking" (no tokens yet) the old
+  // bubble vanishes. Once content starts streaming, the new bubble fades in.
+  const showBubble =
+    !!latestBuddha &&
+    latestBuddha.content.length > 0 &&
+    !isTyping &&
+    buddhaState !== "thinking";
 
   const togglePreach = () => {
     setPreachMode((prev) => {
@@ -36,74 +60,85 @@ export default function Home() {
     });
   };
 
+  const tilePath = `${import.meta.env.BASE_URL}bg-tile.png`;
+
   return (
-    <div
-      className={cn(
-        "h-[100dvh] w-full flex flex-col text-foreground overflow-hidden relative",
-        preachMode && "preach-bg",
-      )}
-      style={
-        preachMode
-          ? undefined
-          : {
-              backgroundImage: `url(${import.meta.env.BASE_URL}bg-tile.png)`,
-              backgroundRepeat: "repeat",
-              backgroundSize: "256px 256px",
-            }
-      }
-    >
+    <div className="h-[100dvh] w-full relative overflow-hidden text-foreground">
+      {/* Base sandstone tile */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url(${tilePath})`,
+          backgroundRepeat: "repeat",
+          backgroundSize: "256px 256px",
+        }}
+      />
+
+      {/* PREACH MODE: full-screen overlay with sunset wash + vibrating grain */}
+      <AnimatePresence>
+        {preachMode && (
+          <motion.div
+            key="preach-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6 }}
+            className="absolute inset-0 z-10 pointer-events-none preach-bg"
+          >
+            <div
+              className="absolute inset-0 preach-grain"
+              style={{
+                backgroundImage: `url(${tilePath})`,
+                backgroundRepeat: "repeat",
+                backgroundSize: "256px 256px",
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Lotus toggle pinned top-right */}
-      <div className="absolute top-3 right-3 z-30">
+      <div className="absolute top-3 right-3 z-40">
         <LotusToggle active={preachMode} onToggle={togglePreach} />
       </div>
 
-      {/* Main split-screen: chat 60% (left) | buddha 40% (right). Stacks on mobile. */}
-      <main className="flex-1 min-h-0 w-full flex flex-col md:flex-row max-w-[1600px] mx-auto">
-        {/* CHAT COLUMN: 60% on desktop, bottom half on mobile */}
-        <section className="flex flex-col min-h-0 flex-1 md:basis-3/5 md:max-w-[60%] order-2 md:order-1 px-3 md:px-6 pt-2 md:pt-6 pb-3 md:pb-6">
-          <div
-            ref={scrollRef}
-            className="flex-1 min-h-0 overflow-y-auto no-scrollbar"
-            style={{
-              maskImage:
-                "linear-gradient(to bottom, transparent, black 5%, black 95%, transparent)",
-              WebkitMaskImage:
-                "-webkit-linear-gradient(top, transparent, black 5%, black 95%, transparent)",
-            }}
-          >
-            <div className="min-h-full flex flex-col justify-end">
-              <ChatMessageList messages={messages} isTyping={isTyping} />
-            </div>
-          </div>
+      {/* CINEMATIC: Buddha centered as the focal point, with a slow fade-in. */}
+      <div
+        className={cn(
+          "absolute inset-0 z-20 flex items-center justify-center pointer-events-none",
+          "buddha-fade-in",
+        )}
+      >
+        <BuddhaSprite state={buddhaState} preachMode={preachMode} size="xl" />
+      </div>
 
-          {/* Input pinned to bottom of the chat column */}
-          <div
-            className="w-full shrink-0 pt-3"
-            style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
-          >
-            <ChatInput onSendMessage={sendMessage} disabled={isTyping} />
-          </div>
-        </section>
-
-        {/* BUDDHA COLUMN: 40% on desktop (sticky/fixed feel), top strip on mobile */}
-        <aside
-          className={cn(
-            "flex items-end md:items-center justify-center md:justify-end shrink-0",
-            "order-1 md:order-2 md:basis-2/5 md:max-w-[40%]",
-            "px-2 md:px-6 pt-3 md:pt-0 pb-1 md:pb-0",
-            // On mobile use a smaller fixed strip; on desktop fill the column
-            "h-[34vh] md:h-auto md:self-stretch",
+      {/* SINGLE BUBBLE — sits above Buddha's head. Old fades out, new fades in. */}
+      <div className="absolute inset-x-0 top-0 z-30 flex justify-center pt-[3vh] md:pt-[5vh] px-4 pointer-events-none">
+        <AnimatePresence mode="wait">
+          {showBubble && latestBuddha && (
+            <motion.div
+              key={latestBuddha.id}
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.45 } }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+            >
+              <CurrentTeaching
+                text={latestBuddha.content}
+                isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
+              />
+            </motion.div>
           )}
-        >
-          {/* On mobile, use a smaller sprite size */}
-          <div className="hidden md:block">
-            <BuddhaSprite state={buddhaState} size="xl" preachMode={preachMode} />
-          </div>
-          <div className="md:hidden">
-            <BuddhaSprite state={buddhaState} size="md" preachMode={preachMode} />
-          </div>
-        </aside>
-      </main>
+        </AnimatePresence>
+      </div>
+
+      {/* MINIMAL INPUT — single elegant line, hand-drawn underline, bottom-center */}
+      <div
+        className="absolute inset-x-0 bottom-0 z-30 px-6"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+      >
+        <ChatInput onSendMessage={sendMessage} disabled={isTyping} />
+      </div>
     </div>
   );
 }

@@ -1,8 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { SendHorizontal } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -11,13 +7,17 @@ interface ChatInputProps {
 
 export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   const handleSend = () => {
-    if (input.trim() && !disabled) {
-      onSendMessage(input);
-      setInput("");
-    }
+    const trimmed = input.trim();
+    if (!trimmed || disabled) return;
+    onSendMessage(trimmed);
+    setInput("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -27,43 +27,43 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
     }
   };
 
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
-    }
-  }, [input]);
-
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay: 0.2 }}
-      className="w-full max-w-2xl mx-auto relative group"
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSend();
+      }}
+      className="w-full max-w-xl mx-auto"
     >
-      <div className="absolute -inset-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 rounded-3xl blur opacity-50 group-hover:opacity-100 transition duration-500"></div>
-      <div className="relative flex items-end gap-2 bg-card border border-border/50 rounded-3xl shadow-lg p-2 transition-all focus-within:ring-1 focus-within:ring-primary/30">
-        <Textarea
-          ref={textareaRef}
+      <div className="relative w-full">
+        <input
+          ref={inputRef}
+          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Speak your mind..."
           disabled={disabled}
-          className="min-h-[50px] max-h-[120px] w-full resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent py-3 px-4 text-base placeholder:text-muted-foreground/60"
-          rows={1}
+          autoComplete="off"
+          className="comic-text w-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-center text-2xl md:text-3xl py-2 placeholder:text-foreground/40 disabled:opacity-50"
         />
-        <Button
-          onClick={handleSend}
-          disabled={!input.trim() || disabled}
-          size="icon"
-          className="h-12 w-12 rounded-full shrink-0 mb-[1px] mr-[1px] bg-primary text-primary-foreground hover:bg-primary/90 transition-transform active:scale-95"
+        {/* Hand-drawn underline */}
+        <svg
+          viewBox="0 0 600 18"
+          preserveAspectRatio="none"
+          className="block w-full h-3 -mt-1"
+          aria-hidden="true"
         >
-          <SendHorizontal className="h-5 w-5" />
-          <span className="sr-only">Send message</span>
-        </Button>
+          <path
+            d="M 6 9 C 80 4, 160 14, 240 8 S 400 4, 480 11 S 560 6, 594 9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.55"
+          />
+        </svg>
       </div>
-    </motion.div>
+    </form>
   );
 }
