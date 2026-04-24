@@ -22,6 +22,8 @@ type YTPlayer = {
   playVideo: () => void;
   pauseVideo: () => void;
   getCurrentTime: () => number;
+  getDuration: () => number;
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   setVolume: (v: number) => void;
 };
 
@@ -102,6 +104,8 @@ export function usePreachSong(enabled: boolean) {
   >("idle");
   const [songNonce, setSongNonce] = useState(0);
   const [syncOffset, setSyncOffset] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const playerRef = useRef<YTPlayer | null>(null);
   // Keep current syncOffset accessible inside the rAF loop without re-binding it
@@ -127,6 +131,8 @@ export function usePreachSong(enabled: boolean) {
         if (cancelled) return;
         setSong(data);
         setCurrentLine("");
+        setCurrentTime(0);
+        setDuration(0);
         setSyncOffset(loadOffset(data.videoId));
       })
       .catch((err) => {
@@ -237,15 +243,27 @@ export function usePreachSong(enabled: boolean) {
   useEffect(() => {
     if (!enabled || !song) return;
     let lastText = "";
+    let lastTimeUpdate = 0;
     let raf = 0;
     const tick = () => {
       const player = playerRef.current;
       if (player && typeof player.getCurrentTime === "function") {
         let t = 0;
+        let d = 0;
         try {
           t = player.getCurrentTime();
+          if (typeof player.getDuration === "function") {
+            d = player.getDuration();
+          }
         } catch {
           /* ignore */
+        }
+        // Throttle progress updates to ~5 Hz so we don't thrash React.
+        const now = performance.now();
+        if (now - lastTimeUpdate > 200) {
+          lastTimeUpdate = now;
+          setCurrentTime(t);
+          if (d > 0) setDuration(d);
         }
         const adjusted = t + syncOffsetRef.current;
         const lines = song.lyrics;
@@ -298,13 +316,27 @@ export function usePreachSong(enabled: boolean) {
     [song],
   );
 
+  const seekTo = useCallback((seconds: number) => {
+    const p = playerRef.current;
+    if (!p || typeof p.seekTo !== "function") return;
+    try {
+      p.seekTo(Math.max(0, seconds), true);
+      setCurrentTime(Math.max(0, seconds));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   return {
     song,
     currentLine,
     status,
     syncOffset,
+    currentTime,
+    duration,
     skip,
     togglePlay,
     nudgeSync,
+    seekTo,
   };
 }

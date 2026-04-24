@@ -161,9 +161,12 @@ export default function Home() {
     currentLine: preachLine,
     status: preachStatus,
     syncOffset: preachSyncOffset,
+    currentTime: preachCurrentTime,
+    duration: preachDuration,
     skip: skipSong,
     togglePlay: togglePreachPlay,
     nudgeSync: nudgePreachSync,
+    seekTo: seekPreachTo,
   } = usePreachSong(true);
 
   // True while a song is actively playing audio (not paused / loading / error).
@@ -446,9 +449,12 @@ export default function Home() {
           song={preachSong}
           status={preachStatus}
           syncOffset={preachSyncOffset}
+          currentTime={preachCurrentTime}
+          duration={preachDuration}
           onTogglePlay={togglePreachPlay}
           onSkip={skipSong}
           onNudgeSync={nudgePreachSync}
+          onSeek={seekPreachTo}
         />
         <AnimatePresence>
           {!musicPlaying && (
