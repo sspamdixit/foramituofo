@@ -127,8 +127,10 @@ export default function Home() {
           "buddha-fade-in",
         )}
       >
-        {/* Reserved bubble slot — items-end so the tail hugs Buddha's head */}
-        <div className="w-full max-w-[560px] flex items-end justify-center h-[26vh] min-h-[140px] max-h-[260px] mb-[-2vh]">
+        {/* Reserved bubble slot — items-end so the tail hugs Buddha's head.
+            Strong negative margin closes the visual gap between the tail tip
+            and the top of Buddha's head (his PNG has transparent padding). */}
+        <div className="w-full max-w-[560px] flex items-end justify-center h-[26vh] min-h-[140px] max-h-[260px] mb-[-7vh]">
           <AnimatePresence mode="wait">
             {showBubble && latestBuddha && (
               <motion.div

@@ -129,6 +129,9 @@ export function SketchBubble({
         width: typeof width === "number" ? `${width}px` : width,
         maxWidth: "92vw",
         aspectRatio: `${aspect}`,
+        // Container query context so the text + padding can scale with the
+        // bubble's actual rendered width, not just viewport breakpoints.
+        containerType: "inline-size",
       }}
     >
       <svg
@@ -139,13 +142,23 @@ export function SketchBubble({
         aria-hidden="true"
       />
       <div
-        className="absolute inset-0 flex items-center justify-center text-center px-10 md:px-14"
+        className="absolute inset-0 flex items-center justify-center text-center"
         style={{
-          paddingTop: `${(18 / VIEWBOX_H) * 100}%`,
-          paddingBottom: `${((VIEWBOX_H - BODY_BOTTOM) / VIEWBOX_H) * 100 + 6}%`,
+          // Padding scales with bubble width via container-query units.
+          paddingTop: `${(14 / VIEWBOX_H) * 100}%`,
+          paddingBottom: `${((VIEWBOX_H - BODY_BOTTOM) / VIEWBOX_H) * 100 + 4}%`,
+          paddingLeft: "7cqi",
+          paddingRight: "7cqi",
         }}
       >
-        <div className="comic-text text-2xl md:text-3xl lg:text-4xl leading-snug max-w-full break-words">
+        <div
+          className="comic-text leading-tight max-w-full break-words"
+          style={{
+            // ~7% of the bubble width, clamped so the smallest bubbles still
+            // read clearly and the largest ones don't go cartoonishly huge.
+            fontSize: "clamp(0.95rem, 6.8cqi, 1.85rem)",
+          }}
+        >
           {children}
         </div>
       </div>
