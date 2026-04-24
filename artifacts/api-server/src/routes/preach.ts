@@ -45,6 +45,37 @@ function parseLrc(lrc: string): LyricLine[] {
   return lines.sort((a, b) => a.time - b.time);
 }
 
+/** Fetch a high-res album cover from the public iTunes Search API.
+ *  Returns null on any failure so the player just renders without art. */
+async function fetchArtwork(
+  title: string,
+  artist: string,
+): Promise<string | null> {
+  const url =
+    "https://itunes.apple.com/search?" +
+    new URLSearchParams({
+      term: `${title} ${artist}`,
+      entity: "song",
+      limit: "1",
+    }).toString();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
+    const data = (await r.json()) as {
+      results?: Array<{ artworkUrl100?: string }>;
+    };
+    const art = data.results?.[0]?.artworkUrl100;
+    if (!art) return null;
+    // iTunes serves 100×100 by default; swap for higher res.
+    return art.replace("100x100", "600x600");
+  } catch {
+    return null;
+  }
+}
+
 router.get("/preach/song", async (req, res) => {
   // Try songs in random order until we find one with usable synced lyrics.
   const shuffled = [...SONGS].sort(() => Math.random() - 0.5);
@@ -71,10 +102,15 @@ router.get("/preach/song", async (req, res) => {
       if (!synced) continue;
       const lyrics = parseLrc(synced);
       if (lyrics.length < 4) continue;
+
+      // Best-effort album art lookup — non-blocking failure
+      const artworkUrl = await fetchArtwork(song.title, song.artist);
+
       res.json({
         title: song.title,
         artist: song.artist,
         videoId: song.videoId,
+        artworkUrl,
         lyrics,
       });
       return;

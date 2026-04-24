@@ -7,6 +7,7 @@ import { usePreachSong } from "@/hooks/use-preach-song";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { LotusToggle } from "@/components/lotus-toggle";
+import { PreachPlayer } from "@/components/preach-player";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
 import { VibeBackground } from "@/components/vibe-background";
@@ -161,8 +162,15 @@ export default function Home() {
   };
 
   // Hidden YouTube playback + synced lyrics whenever preach mode is on
-  const { song: preachSong, currentLine: preachLine, status: preachStatus, skip: skipSong } =
-    usePreachSong(preachMode);
+  const {
+    song: preachSong,
+    currentLine: preachLine,
+    status: preachStatus,
+    syncOffset: preachSyncOffset,
+    skip: skipSong,
+    togglePlay: togglePreachPlay,
+    nudgeSync: nudgePreachSync,
+  } = usePreachSong(preachMode);
 
   // ── Click reactions on Buddha's head ──────────────────────────────
   const handleHeadClick = useCallback(() => {
@@ -342,63 +350,6 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      {/* Now-playing chip — shows the song Buddha is "singing" in preach mode */}
-      <AnimatePresence>
-        {preachMode && preachSong && (
-          <motion.div
-            key="preach-chip"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.4 }}
-            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-auto"
-          >
-            <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-stone-300 shadow-md text-stone-700 text-sm">
-              <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="font-medium truncate max-w-[55vw] md:max-w-md">
-                {preachSong.title}
-                <span className="text-stone-500"> · {preachSong.artist}</span>
-              </span>
-              <button
-                type="button"
-                onClick={skipSong}
-                className="ml-1 text-xs px-2 py-1 rounded-full border border-stone-300 hover:bg-stone-100 transition-colors"
-                title="Skip to another song"
-              >
-                Skip
-              </button>
-            </div>
-          </motion.div>
-        )}
-        {preachMode && !preachSong && preachStatus === "loading" && (
-          <motion.div
-            key="preach-loading"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.4 }}
-            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-none"
-          >
-            <div className="px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-stone-300 shadow-md text-stone-600 text-sm">
-              Tuning the celestial radio…
-            </div>
-          </motion.div>
-        )}
-        {preachMode && preachStatus === "error" && (
-          <motion.div
-            key="preach-error"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.4 }}
-            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-none"
-          >
-            <div className="px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-rose-300 shadow-md text-rose-600 text-sm">
-              Couldn't reach the lyric library. Try again in a sec.
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Bless-flash overlay */}
       <AnimatePresence>
@@ -421,16 +372,45 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* MINIMAL INPUT — single elegant line, hand-drawn underline, bottom-center */}
+      {/* BOTTOM AREA — chat input by default, music player while preach mode is on */}
       <div
-        className="absolute inset-x-0 bottom-0 z-30 px-6"
+        className="absolute inset-x-0 bottom-0 z-30 px-4 md:px-6"
         style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
       >
-        <ChatInput
-          onSendMessage={handleSend}
-          onTypingChange={handleTypingChange}
-          disabled={isTyping}
-        />
+        <AnimatePresence mode="wait">
+          {preachMode ? (
+            <motion.div
+              key="preach-player"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <PreachPlayer
+                song={preachSong}
+                status={preachStatus}
+                syncOffset={preachSyncOffset}
+                onTogglePlay={togglePreachPlay}
+                onSkip={skipSong}
+                onNudgeSync={nudgePreachSync}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="chat-input"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <ChatInput
+                onSendMessage={handleSend}
+                onTypingChange={handleTypingChange}
+                disabled={isTyping}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

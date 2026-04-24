@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type LyricLine = { time: number; text: string };
 
@@ -6,6 +6,7 @@ export type PreachSong = {
   title: string;
   artist: string;
   videoId: string;
+  artworkUrl: string | null;
   lyrics: LyricLine[];
 };
 
@@ -55,7 +56,6 @@ function ensureContainer(): HTMLDivElement {
   if (el) return el;
   el = document.createElement("div");
   el.id = PLAYER_CONTAINER_ID;
-  // Hide off-screen but keep in the layout so YouTube can render the iframe.
   Object.assign(el.style, {
     position: "fixed",
     top: "-9999px",
@@ -69,12 +69,27 @@ function ensureContainer(): HTMLDivElement {
   return el;
 }
 
+const SYNC_OFFSET_KEY_PREFIX = "buddha-preach-sync-offset:";
+function loadOffset(videoId: string): number {
+  if (typeof window === "undefined") return 0;
+  const raw = window.localStorage.getItem(SYNC_OFFSET_KEY_PREFIX + videoId);
+  const n = raw ? parseFloat(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+function saveOffset(videoId: string, offset: number) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SYNC_OFFSET_KEY_PREFIX + videoId, String(offset));
+}
+
 /**
  * usePreachSong — when `enabled`, fetches a random song from /api/preach/song,
  * spins up a hidden YouTube player to play it, and exposes the lyric line
- * that's currently being sung.
+ * that's currently being sung along with playback controls.
  *
- *   const { song, currentLine, status, skip } = usePreachSong(preachMode);
+ * Lyrics drift fix: the LRC timestamps from lrclib are aligned to the album
+ * track, while a YouTube video may have a different intro length. The caller
+ * can nudge `syncOffset` (in seconds, ±) via `nudgeSync`; the value is
+ * persisted per-videoId in localStorage so it sticks the next play.
  *
  * Tear-down (player destroy + state reset) happens automatically when
  * `enabled` flips back to false.
@@ -83,13 +98,17 @@ export function usePreachSong(enabled: boolean) {
   const [song, setSong] = useState<PreachSong | null>(null);
   const [currentLine, setCurrentLine] = useState<string>("");
   const [status, setStatus] = useState<
-    "idle" | "loading" | "playing" | "error"
+    "idle" | "loading" | "playing" | "paused" | "error"
   >("idle");
   const [songNonce, setSongNonce] = useState(0);
+  const [syncOffset, setSyncOffset] = useState(0);
 
   const playerRef = useRef<YTPlayer | null>(null);
+  // Keep current syncOffset accessible inside the rAF loop without re-binding it
+  const syncOffsetRef = useRef(0);
+  syncOffsetRef.current = syncOffset;
 
-  // ── Fetch a new song whenever enabled flips on, or when skip is called ──
+  // ── Fetch a new song whenever enabled flips on, or skip is called ──
   useEffect(() => {
     if (!enabled) {
       setSong(null);
@@ -108,6 +127,7 @@ export function usePreachSong(enabled: boolean) {
         if (cancelled) return;
         setSong(data);
         setCurrentLine("");
+        setSyncOffset(loadOffset(data.videoId));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -123,7 +143,6 @@ export function usePreachSong(enabled: boolean) {
   // ── Spin up YouTube player when we have a song ──
   useEffect(() => {
     if (!enabled || !song) {
-      // Tear down existing player on disable
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
@@ -140,8 +159,6 @@ export function usePreachSong(enabled: boolean) {
     loadYouTubeApi().then((YT) => {
       if (cancelled) return;
       ensureContainer();
-      // YouTube replaces the container element with the iframe; if we already
-      // had a player, destroy it first so it doesn't leak.
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
@@ -149,7 +166,6 @@ export function usePreachSong(enabled: boolean) {
           /* ignore */
         }
         playerRef.current = null;
-        // Re-create the container since YT removed the previous one
         ensureContainer();
       }
 
@@ -175,8 +191,17 @@ export function usePreachSong(enabled: boolean) {
               /* ignore */
             }
           },
+          onStateChange: (e: { data: number }) => {
+            // YT.PlayerState: -1 unstarted, 0 ended, 1 playing, 2 paused,
+            // 3 buffering, 5 cued
+            if (e.data === 1) setStatus("playing");
+            else if (e.data === 2) setStatus("paused");
+            else if (e.data === 0) {
+              // Ended → next song
+              setSongNonce((n) => n + 1);
+            }
+          },
           onError: () => {
-            // Bad video — bump the nonce to fetch another song
             // eslint-disable-next-line no-console
             console.warn("[preach] YT error, picking another song");
             setSongNonce((n) => n + 1);
@@ -213,14 +238,15 @@ export function usePreachSong(enabled: boolean) {
         try {
           t = player.getCurrentTime();
         } catch {
-          /* before player ready */
+          /* ignore */
         }
+        // Apply the sync offset: positive offset = lyrics arrive earlier
+        // (i.e. the video has a longer intro than the album).
+        const adjusted = t + syncOffsetRef.current;
         const lines = song.lyrics;
         let active = "";
-        // walk back from the end so we get the most recent line whose
-        // timestamp has passed
         for (let i = lines.length - 1; i >= 0; i--) {
-          if (t + 0.05 >= lines[i].time) {
+          if (adjusted + 0.05 >= lines[i].time) {
             active = lines[i].text;
             break;
           }
@@ -236,7 +262,37 @@ export function usePreachSong(enabled: boolean) {
     return () => cancelAnimationFrame(raf);
   }, [enabled, song]);
 
-  const skip = () => setSongNonce((n) => n + 1);
+  const skip = useCallback(() => setSongNonce((n) => n + 1), []);
 
-  return { song, currentLine, status, skip };
+  const togglePlay = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      if (status === "playing") p.pauseVideo();
+      else p.playVideo();
+    } catch {
+      /* ignore */
+    }
+  }, [status]);
+
+  const nudgeSync = useCallback(
+    (delta: number) => {
+      setSyncOffset((cur) => {
+        const next = Math.max(-10, Math.min(10, cur + delta));
+        if (song) saveOffset(song.videoId, next);
+        return next;
+      });
+    },
+    [song],
+  );
+
+  return {
+    song,
+    currentLine,
+    status,
+    syncOffset,
+    skip,
+    togglePlay,
+    nudgeSync,
+  };
 }
