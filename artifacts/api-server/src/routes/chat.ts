@@ -21,13 +21,21 @@ Rules:
 type ChatRole = "user" | "buddha";
 type IncomingMessage = { role: ChatRole; content: string };
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+const replitGeminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+const replitGeminiBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+const directGeminiKey = process.env.GEMINI_API_KEY;
+
+const ai = replitGeminiBaseUrl
+  ? new GoogleGenAI({
+      apiKey: replitGeminiKey,
+      httpOptions: {
+        apiVersion: "",
+        baseUrl: replitGeminiBaseUrl,
+      },
+    })
+  : new GoogleGenAI({
+      apiKey: directGeminiKey,
+    });
 
 router.post("/chat", async (req, res) => {
   const body = req.body as {
