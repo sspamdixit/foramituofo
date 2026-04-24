@@ -102,34 +102,41 @@ export default function Home() {
         <LotusToggle active={preachMode} onToggle={togglePreach} />
       </div>
 
-      {/* CINEMATIC: Buddha centered as the focal point, with a slow fade-in. */}
+      {/*
+        CINEMATIC stack: bubble + Buddha travel together as a single centered
+        unit so the bubble's tail always lands just above his head, no matter
+        the viewport size. A reserved bubble slot keeps Buddha from jumping
+        when the bubble appears or disappears.
+      */}
       <div
         className={cn(
-          "absolute inset-0 z-20 flex items-center justify-center pointer-events-none",
+          "absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none px-4 pb-24",
           "buddha-fade-in",
         )}
       >
-        <BuddhaSprite state={buddhaState} preachMode={preachMode} size="xl" />
-      </div>
+        {/* Reserved bubble slot — items-end so the tail hugs Buddha's head */}
+        <div className="w-full max-w-[560px] flex items-end justify-center h-[26vh] min-h-[140px] max-h-[260px] mb-[-2vh]">
+          <AnimatePresence mode="wait">
+            {showBubble && latestBuddha && (
+              <motion.div
+                key={latestBuddha.id}
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.45 } }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="w-full flex justify-center"
+              >
+                <CurrentTeaching
+                  text={latestBuddha.content}
+                  isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-      {/* SINGLE BUBBLE — sits above Buddha's head. Old fades out, new fades in. */}
-      <div className="absolute inset-x-0 top-0 z-30 flex justify-center pt-[3vh] md:pt-[5vh] px-4 pointer-events-none">
-        <AnimatePresence mode="wait">
-          {showBubble && latestBuddha && (
-            <motion.div
-              key={latestBuddha.id}
-              initial={{ opacity: 0, y: -8, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.45 } }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-            >
-              <CurrentTeaching
-                text={latestBuddha.content}
-                isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Buddha — focal centerpoint, sized via vmin so he never crowds the bubble */}
+        <BuddhaSprite state={buddhaState} preachMode={preachMode} size="xl" />
       </div>
 
       {/* MINIMAL INPUT — single elegant line, hand-drawn underline, bottom-center */}

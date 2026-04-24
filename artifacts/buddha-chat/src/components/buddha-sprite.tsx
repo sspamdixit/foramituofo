@@ -20,11 +20,13 @@ interface BuddhaSpriteProps {
   preachMode?: boolean;
 }
 
+// Sizes are viewport-relative so Buddha never crowds the bubble or input
+// on short viewports. They cap at a sensible max on large screens.
 const SIZE_CLASSES: Record<NonNullable<BuddhaSpriteProps["size"]>, string> = {
-  sm: "w-32 h-32 md:w-40 md:h-40",
-  md: "w-64 h-64 md:w-80 md:h-80",
-  lg: "w-72 h-72 md:w-96 md:h-96",
-  xl: "w-72 h-72 md:w-[26rem] md:h-[26rem] lg:w-[30rem] lg:h-[30rem]",
+  sm: "w-[min(28vmin,10rem)] h-[min(28vmin,10rem)]",
+  md: "w-[min(40vmin,18rem)] h-[min(40vmin,18rem)]",
+  lg: "w-[min(50vmin,22rem)] h-[min(50vmin,22rem)]",
+  xl: "w-[min(58vmin,28rem)] h-[min(58vmin,28rem)]",
 };
 
 export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaSpriteProps) {
