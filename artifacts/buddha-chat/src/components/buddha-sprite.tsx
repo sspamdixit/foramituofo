@@ -12,11 +12,18 @@ const SPRITE_MAP: Record<BuddhaState, string> = {
 
 interface BuddhaSpriteProps {
   state: BuddhaState;
+  size?: "md" | "lg" | "xl";
 }
 
-export function BuddhaSprite({ state }: BuddhaSpriteProps) {
+const SIZE_CLASSES: Record<NonNullable<BuddhaSpriteProps["size"]>, string> = {
+  md: "w-64 h-64 md:w-80 md:h-80",
+  lg: "w-72 h-72 md:w-96 md:h-96",
+  xl: "w-80 h-80 md:w-[28rem] md:h-[28rem] lg:w-[32rem] lg:h-[32rem]",
+};
+
+export function BuddhaSprite({ state, size = "xl" }: BuddhaSpriteProps) {
   return (
-    <div className="relative w-64 h-64 md:w-80 md:h-80 mx-auto flex items-center justify-center">
+    <div className={`relative ${SIZE_CLASSES[size]} flex items-center justify-center`}>
       {/* Subtle glowing aura */}
       <motion.div
         className="absolute inset-0 rounded-full bg-primary/10 dark:bg-primary/20 blur-3xl"

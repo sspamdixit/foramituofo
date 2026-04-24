@@ -86,48 +86,52 @@ export default function Home() {
         backgroundSize: "256px 256px",
       }}
     >
-      <main className="flex-1 flex flex-col items-center w-full max-w-5xl mx-auto px-4 py-6 md:py-10 z-10">
-        {/* Buddha + comic bubble */}
-        <div className="mt-4 md:mt-8 mb-6 md:mb-10 flex flex-col items-center w-full">
-          <div className="w-full flex justify-center min-h-[8rem] md:min-h-[10rem] items-end pb-6">
-            <AnimatePresence mode="wait">
-              {lastBuddha && lastBuddha.content.length > 0 ? (
-                <LatestThought
-                  key={lastBuddha.id}
-                  text={lastBuddha.content}
-                  isStreaming={!!lastBuddha.isStreaming}
-                  mood={moodForState(buddhaState)}
-                />
-              ) : isTyping ? (
-                <ThinkingThought key="thinking" />
-              ) : null}
-            </AnimatePresence>
+      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto px-4 py-4 md:py-6 z-10 min-h-[100dvh]">
+        {/* Two-column area: chat list on the left, buddha + floating bubble on the right */}
+        <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 overflow-hidden">
+          {/* LEFT: Conversation history */}
+          <div
+            ref={scrollRef}
+            className="w-full md:w-2/5 md:max-w-md overflow-y-auto no-scrollbar order-2 md:order-1"
+            style={{
+              maskImage:
+                "linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)",
+              WebkitMaskImage:
+                "-webkit-linear-gradient(top, transparent, black 6%, black 94%, transparent)",
+            }}
+          >
+            <div className="min-h-full flex flex-col justify-end pb-4 pr-2">
+              <ChatMessageList
+                messages={messages}
+                isTyping={isTyping}
+                hideLatestBuddha
+              />
+            </div>
           </div>
 
-          <BuddhaSprite state={buddhaState} />
-        </div>
+          {/* RIGHT: Buddha + floating bubble (tail points right at buddha) */}
+          <div className="flex-1 flex items-center justify-end gap-2 md:gap-4 pr-2 md:pr-6 order-1 md:order-2 min-h-[20rem]">
+            {/* Reserved bubble slot so buddha doesn't shift when it appears */}
+            <div className="flex-1 max-w-[22rem] md:max-w-[26rem] flex justify-end items-center">
+              <AnimatePresence mode="wait">
+                {lastBuddha && lastBuddha.content.length > 0 ? (
+                  <LatestThought
+                    key={lastBuddha.id}
+                    text={lastBuddha.content}
+                    isStreaming={!!lastBuddha.isStreaming}
+                    mood={moodForState(buddhaState)}
+                  />
+                ) : isTyping ? (
+                  <ThinkingThought key="thinking" />
+                ) : null}
+              </AnimatePresence>
+            </div>
 
-        {/* Conversation history */}
-        <div
-          ref={scrollRef}
-          className="flex-1 w-full overflow-y-auto mb-6 no-scrollbar"
-          style={{
-            maskImage:
-              "linear-gradient(to bottom, transparent, black 5%, black 95%, transparent)",
-            WebkitMaskImage:
-              "-webkit-linear-gradient(top, transparent, black 5%, black 95%, transparent)",
-          }}
-        >
-          <div className="min-h-full flex flex-col justify-end pb-4">
-            <ChatMessageList
-              messages={messages}
-              isTyping={isTyping}
-              hideLatestBuddha
-            />
+            <BuddhaSprite state={buddhaState} size="xl" />
           </div>
         </div>
 
-        <div className="w-full shrink-0 pt-2 pb-4">
+        <div className="w-full shrink-0 pt-3 pb-2">
           <ChatInput onSendMessage={sendMessage} disabled={isTyping} />
         </div>
       </main>

@@ -6,9 +6,9 @@ export type BubbleMood = "speak" | "think" | "bless" | "refuse";
 
 /* ---------------- Hand-tuned bubble paths (viewBox 0 0 400 200) ---------------- */
 
-// Speech bubble: rounded oval with a pointed tail at bottom-left.
+// Speech bubble: rounded oval with a pointed tail on the RIGHT (pointing at buddha).
 const SPEAK_PATH =
-  "M 50 30 C 22 36 14 62 14 96 C 14 130 24 156 56 166 C 80 170 110 170 130 170 L 134 197 L 168 170 L 340 170 C 372 165 388 144 388 105 C 388 64 376 34 346 27 C 290 17 100 22 50 30 Z";
+  "M 45 30 C 20 36 12 62 12 96 C 12 130 22 156 52 166 C 95 170 250 170 305 170 C 335 168 348 148 348 118 L 392 100 L 348 84 C 348 62 338 34 310 27 C 260 17 95 22 45 30 Z";
 
 // Cloud / thought bubble: scalloped edges all around.
 const THINK_PATH =
@@ -56,7 +56,8 @@ interface ComicBubbleProps {
 }
 
 const PADDING_BY_MOOD: Record<BubbleMood, string> = {
-  speak: "px-12 pt-7 pb-14",
+  // extra right padding leaves room for the speech-tail jutting right
+  speak: "pl-10 pr-16 py-7",
   think: "px-12 py-9",
   bless: "px-14 py-10",
   refuse: "px-20 py-12",
@@ -163,14 +164,14 @@ export function ComicBubble({
   );
 }
 
-/** Three little hand-drawn circles trailing down to the buddha. */
+/** Three little hand-drawn circles trailing rightward toward the buddha. */
 function ComicTrail() {
   return (
     <svg
-      width="40"
-      height="60"
-      viewBox="0 0 40 60"
-      className="absolute left-1/2 -translate-x-1/2 -bottom-12 overflow-visible"
+      width="70"
+      height="40"
+      viewBox="0 0 70 40"
+      className="absolute -right-16 top-1/2 -translate-y-1/2 overflow-visible"
       aria-hidden="true"
     >
       <g
@@ -179,9 +180,9 @@ function ComicTrail() {
         strokeWidth="2"
         vectorEffect="non-scaling-stroke"
       >
-        <circle cx="20" cy="10" r="9" />
-        <circle cx="22" cy="32" r="6" />
-        <circle cx="19" cy="50" r="4" />
+        <circle cx="10" cy="20" r="9" />
+        <circle cx="34" cy="22" r="6" />
+        <circle cx="56" cy="20" r="4" />
       </g>
     </svg>
   );
