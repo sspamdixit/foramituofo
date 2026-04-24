@@ -382,6 +382,88 @@
   pointer-events: none;
 }
 
+/* ─── Comic-book layer: Ben-Day halftone dots ─────────────────────────
+   Two stacked layers at different scales create a non-uniform density
+   that reads as classic newsprint dots without looking like graph paper.
+   The dot color comes from --vibe-ink so it adapts to the mood. */
+.comic-halftone {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(
+    circle,
+    var(--vibe-ink) 1.1px,
+    transparent 1.6px
+  );
+}
+.comic-halftone-a {
+  background-size: 11px 11px;
+  background-position: 0 0;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+}
+.comic-halftone-b {
+  background-size: 22px 22px;
+  background-position: 6px 8px;
+  opacity: 0.30;
+  mix-blend-mode: multiply;
+  /* Soft fade from corners so the dots concentrate around the edges,
+     leaving Buddha's center area cleaner — feels like vignette inks. */
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 65% at 50% 55%,
+    transparent 0%,
+    black 95%
+  );
+          mask-image: radial-gradient(
+    ellipse 70% 65% at 50% 55%,
+    transparent 0%,
+    black 95%
+  );
+}
+/* On dark vibes (melancholy / deep / fiery) the ink color is bright,
+   so 'multiply' would erase it. Switch to 'screen' for those palettes. */
+.vibe-bg:is([style*="rgba(200, 215, 255"], [style*="rgba(220, 200, 255"], [style*="rgba(60, 0, 0"]) .comic-halftone {
+  mix-blend-mode: screen;
+}
+
+/* ─── Comic-book speed/action lines radiating from behind Buddha ────── */
+.comic-speedlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-conic-gradient(
+    from 0deg at 65% 55%,
+    var(--vibe-ink) 0deg,
+    var(--vibe-ink) 0.6deg,
+    transparent 0.6deg,
+    transparent 6deg
+  );
+  -webkit-mask-image: radial-gradient(
+    circle at 65% 55%,
+    transparent 28%,
+    black 70%,
+    transparent 100%
+  );
+          mask-image: radial-gradient(
+    circle at 65% 55%,
+    transparent 28%,
+    black 70%,
+    transparent 100%
+  );
+  opacity: 0.18;
+  mix-blend-mode: multiply;
+}
+
+/* ─── Comic panel: hand-drawn ink frame around the whole viewport ───── */
+.comic-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 /* Reduced motion: kill the drift, keep the colors */
 @media (prefers-reduced-motion: reduce) {
   .vibe-blob-a, .vibe-blob-b, .vibe-blob-c { animation: none; }
