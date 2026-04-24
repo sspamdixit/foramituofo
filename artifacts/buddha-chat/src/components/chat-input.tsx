@@ -51,7 +51,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           placeholder="Speak your mind..."
           disabled={disabled}
-          className="min-h-[50px] max-h-[120px] w-full resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent py-3 px-4 text-base placeholder:text-muted-foreground/60 placeholder:font-serif placeholder:italic"
+          className="min-h-[50px] max-h-[120px] w-full resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent py-3 px-4 text-base placeholder:text-muted-foreground/60"
           rows={1}
         />
         <Button

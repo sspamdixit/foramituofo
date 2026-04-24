@@ -121,8 +121,8 @@
   --sidebar-accent-foreground: 24 20% 25%;
   --sidebar-ring: 35 60% 60%;
 
-  --app-font-sans: 'Fraunces', 'Georgia', serif;
-  --app-font-serif: 'Fraunces', 'Georgia', serif;
+  --app-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --app-font-serif: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --app-font-mono: 'Menlo', monospace;
   --radius: 1.5rem; /* softer, rounded corners */
   
