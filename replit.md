@@ -4,6 +4,10 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Artifacts
+
+- **buddha-chat** (`/`) — Buddha Chat single-page web app. Centered cartoon Buddha sprite with placeholder PNGs in `artifacts/buddha-chat/public/` (`idle.png`, `thinking.png`, `speaking.png` — swap with real sprite files later). Chat reply logic is encapsulated in `useBuddhaChat` (frontend-only mock); plug Gemini + Groq calls into that hook later.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

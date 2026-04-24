@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Buddha Chat"
+version = "1.0.0"
+id = "artifacts/buddha-chat"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19984
+
+[services.development]
+run = "pnpm --filter @workspace/buddha-chat run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/buddha-chat", "run", "build" ]
+publicDir = "artifacts/buddha-chat/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19984"
+BASE_PATH = "/"

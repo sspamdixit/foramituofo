@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Sf9z_nVn1Vob7lWR5yr5F"
+uri = "file://artifacts/buddha-chat/public/idle.png"
+type = "image"
+title = "Idle Buddha monk cartoon"
+
+[[generated]]
+id = "KXfTyRopLxITqiXfG7vGG"
+uri = "file://artifacts/buddha-chat/public/thinking.png"
+type = "image"
+title = "Thinking Buddha monk cartoon"
+
+[[generated]]
+id = "E6jVyG1AdENXNkJN6Q6Yu"
+uri = "file://artifacts/buddha-chat/public/speaking.png"
+type = "image"
+title = "Speaking Buddha monk cartoon"
