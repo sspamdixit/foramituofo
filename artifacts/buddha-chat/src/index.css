@@ -286,6 +286,107 @@
   transform-origin: center;
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   Vibe background — replaces the tiled sandstone image with an
+   organic, color-shifting CSS background that adapts to the mood
+   of the conversation. Uses @property so the colors interpolate
+   smoothly when the vibe changes.
+   ────────────────────────────────────────────────────────────────── */
+
+@property --vibe-a {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(40, 70%, 92%);
+}
+@property --vibe-b {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(32, 60%, 86%);
+}
+@property --vibe-c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(38, 50%, 90%);
+}
+@property --vibe-d {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(45, 80%, 95%);
+}
+
+.vibe-bg {
+  background:
+    radial-gradient(ellipse 65% 55% at 18% 22%, var(--vibe-a) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 70% at 88% 30%, var(--vibe-b) 0%, transparent 65%),
+    radial-gradient(ellipse 80% 60% at 50% 95%, var(--vibe-c) 0%, transparent 70%),
+    linear-gradient(160deg, var(--vibe-d) 0%, var(--vibe-a) 100%);
+  transition:
+    --vibe-a 2.4s ease-in-out,
+    --vibe-b 2.4s ease-in-out,
+    --vibe-c 2.4s ease-in-out,
+    --vibe-d 2.4s ease-in-out;
+  overflow: hidden;
+}
+
+/* Slow-drifting blurred blobs so the background never feels static or tiled */
+.vibe-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+}
+.vibe-blob-a {
+  width: 55vmin;
+  height: 55vmin;
+  top: -10vmin;
+  left: -8vmin;
+  background: radial-gradient(circle, var(--vibe-b) 0%, transparent 70%);
+  animation: vibe-drift-a 22s ease-in-out infinite;
+}
+.vibe-blob-b {
+  width: 50vmin;
+  height: 50vmin;
+  top: 30vh;
+  right: -10vmin;
+  background: radial-gradient(circle, var(--vibe-c) 0%, transparent 70%);
+  animation: vibe-drift-b 28s ease-in-out infinite;
+}
+.vibe-blob-c {
+  width: 60vmin;
+  height: 60vmin;
+  bottom: -15vmin;
+  left: 25%;
+  background: radial-gradient(circle, var(--vibe-a) 0%, transparent 70%);
+  animation: vibe-drift-c 32s ease-in-out infinite;
+}
+
+@keyframes vibe-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(6vw, 4vh) scale(1.08); }
+}
+@keyframes vibe-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-5vw, -3vh) scale(1.05); }
+}
+@keyframes vibe-drift-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-3vw, -5vh) scale(1.1); }
+}
+
+/* High-frequency noise grain so the gradient feels like paper, not vinyl */
+.vibe-grain {
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Reduced motion: kill the drift, keep the colors */
+@media (prefers-reduced-motion: reduce) {
+  .vibe-blob-a, .vibe-blob-b, .vibe-blob-c { animation: none; }
+}
+
 /* Preach-mode full-screen overlay — warm sunset gradient */
 .preach-bg {
   background-image:

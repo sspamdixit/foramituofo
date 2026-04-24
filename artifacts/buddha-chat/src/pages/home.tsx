@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useBuddhaChat, type BuddhaState } from "@/hooks/use-buddha-chat";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { useVibe } from "@/hooks/use-vibe";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { LotusToggle } from "@/components/lotus-toggle";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
+import { VibeBackground } from "@/components/vibe-background";
 import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
 
@@ -227,18 +229,12 @@ export default function Home() {
       buddhaState !== "thinking");
 
   const tilePath = `${import.meta.env.BASE_URL}bg-tile.png`;
+  const vibe = useVibe(messages);
 
   return (
     <div className="h-[100dvh] w-full relative overflow-hidden text-foreground">
-      {/* Base sandstone tile */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `url(${tilePath})`,
-          backgroundRepeat: "repeat",
-          backgroundSize: "256px 256px",
-        }}
-      />
+      {/* Vibe-aware adaptive background — colors shift with the conversation */}
+      <VibeBackground vibe={preachMode ? "calm" : vibe} />
 
       {/* PREACH MODE: full-screen sunset wash + grain */}
       <AnimatePresence>
