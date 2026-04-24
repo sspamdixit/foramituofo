@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export type BuddhaState = "idle" | "thinking" | "speaking";
+export type BuddhaState =
+  | "idle"
+  | "thinking"
+  | "speaking"
+  | "blessing"
+  | "refusing";
 
 export type ChatMessage = {
   id: string;

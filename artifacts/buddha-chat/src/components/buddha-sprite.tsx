@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
 import { type BuddhaState } from "@/hooks/use-buddha-chat";
 
-// Update these to match the generated file paths once they're ready
+// Sprite filenames live in /public — swap files there to update artwork.
 const SPRITE_MAP: Record<BuddhaState, string> = {
-  idle: "/idle.png",
-  thinking: "/thinking.png",
-  speaking: "/speaking.png",
+  idle: `${import.meta.env.BASE_URL}idle.png`,
+  thinking: `${import.meta.env.BASE_URL}thinking.png`,
+  speaking: `${import.meta.env.BASE_URL}speaking.png`,
+  blessing: `${import.meta.env.BASE_URL}blessing.png`,
+  refusing: `${import.meta.env.BASE_URL}refusing.png`,
 };
 
 interface BuddhaSpriteProps {
