@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useBuddhaChat, type BuddhaState } from "@/hooks/use-buddha-chat";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { useVibe } from "@/hooks/use-vibe";
+import { usePreachSong } from "@/hooks/use-preach-song";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { LotusToggle } from "@/components/lotus-toggle";
@@ -11,12 +12,6 @@ import { TalismanCard } from "@/components/talisman-card";
 import { VibeBackground } from "@/components/vibe-background";
 import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
-
-/** Stub for hooking up YouTube/Spotify in the future. */
-function playPreachMusic(active: boolean) {
-  // eslint-disable-next-line no-console
-  console.info(`[playPreachMusic] preach mode is now ${active ? "ON" : "OFF"}`);
-}
 
 /** Lines Buddha quietly drops if you go silent for a while. */
 const IDLE_LINES = [
@@ -162,12 +157,12 @@ export default function Home() {
   }, [latestBuddha?.id, latestBuddha?.content.length]);
 
   const togglePreach = () => {
-    setPreachMode((prev) => {
-      const next = !prev;
-      playPreachMusic(next);
-      return next;
-    });
+    setPreachMode((prev) => !prev);
   };
+
+  // Hidden YouTube playback + synced lyrics whenever preach mode is on
+  const { song: preachSong, currentLine: preachLine, status: preachStatus, skip: skipSong } =
+    usePreachSong(preachMode);
 
   // ── Click reactions on Buddha's head ──────────────────────────────
   const handleHeadClick = useCallback(() => {
@@ -218,9 +213,11 @@ export default function Home() {
   }, []);
 
   // ── Bubble selection logic ────────────────────────────────────────
-  // Override (click reaction / idle thought) wins over the chat bubble.
+  // Priority: preach lyric > override (click/idle) > Buddha's chat reply.
   // While the user is typing, dissolve the chat bubble too.
+  const preachActive = preachMode && preachLine.trim().length > 0;
   const showBubble =
+    preachActive ||
     !!override ||
     (!!latestBuddha &&
       latestBuddha.content.length > 0 &&
@@ -306,7 +303,18 @@ export default function Home() {
         }}
       >
         <AnimatePresence mode="wait">
-          {showBubble && override && (
+          {showBubble && preachActive && (
+            <motion.div
+              key={`preach-${preachLine}`}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4, transition: { duration: 0.25 } }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <StaticThought text={preachLine} />
+            </motion.div>
+          )}
+          {showBubble && !preachActive && override && (
             <motion.div
               key={override.id}
               initial={{ opacity: 0, y: -8, scale: 0.95 }}
@@ -317,7 +325,7 @@ export default function Home() {
               <StaticThought text={override.text} />
             </motion.div>
           )}
-          {showBubble && !override && latestBuddha && (
+          {showBubble && !preachActive && !override && latestBuddha && (
             <motion.div
               key={latestBuddha.id}
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
@@ -333,6 +341,64 @@ export default function Home() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Now-playing chip — shows the song Buddha is "singing" in preach mode */}
+      <AnimatePresence>
+        {preachMode && preachSong && (
+          <motion.div
+            key="preach-chip"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.4 }}
+            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-auto"
+          >
+            <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-stone-300 shadow-md text-stone-700 text-sm">
+              <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="font-medium truncate max-w-[55vw] md:max-w-md">
+                {preachSong.title}
+                <span className="text-stone-500"> · {preachSong.artist}</span>
+              </span>
+              <button
+                type="button"
+                onClick={skipSong}
+                className="ml-1 text-xs px-2 py-1 rounded-full border border-stone-300 hover:bg-stone-100 transition-colors"
+                title="Skip to another song"
+              >
+                Skip
+              </button>
+            </div>
+          </motion.div>
+        )}
+        {preachMode && !preachSong && preachStatus === "loading" && (
+          <motion.div
+            key="preach-loading"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.4 }}
+            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-none"
+          >
+            <div className="px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-stone-300 shadow-md text-stone-600 text-sm">
+              Tuning the celestial radio…
+            </div>
+          </motion.div>
+        )}
+        {preachMode && preachStatus === "error" && (
+          <motion.div
+            key="preach-error"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.4 }}
+            className="absolute z-40 left-1/2 -translate-x-1/2 bottom-24 md:bottom-28 pointer-events-none"
+          >
+            <div className="px-4 py-2 rounded-full bg-white/85 backdrop-blur border border-rose-300 shadow-md text-rose-600 text-sm">
+              Couldn't reach the lyric library. Try again in a sec.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bless-flash overlay */}
       <AnimatePresence>
