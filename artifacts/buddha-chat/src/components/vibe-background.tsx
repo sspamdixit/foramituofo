@@ -12,6 +12,12 @@ type VibePalette = {
   d: string;
   /** Color of the woven micro-pattern that sits on top */
   ink: string;
+  /**
+   * High-contrast color for any text that sits directly on the background
+   * (no surface behind it). Picked by hand per palette so it stays legible
+   * against the underlying wash.
+   */
+  text: string;
 };
 
 const PALETTES: Record<Vibe, VibePalette> = {
@@ -21,6 +27,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(38 50% 90%)",
     d: "hsl(45 80% 95%)",
     ink: "rgba(85, 55, 25, 0.55)",
+    text: "hsl(28 45% 18%)",
   },
   joyful: {
     a: "hsl(42 95% 80%)",
@@ -28,6 +35,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(35 95% 84%)",
     d: "hsl(50 100% 90%)",
     ink: "rgba(150, 60, 10, 0.55)",
+    text: "hsl(18 70% 18%)",
   },
   melancholy: {
     a: "hsl(225 55% 38%)",
@@ -35,6 +43,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(250 40% 40%)",
     d: "hsl(220 60% 22%)",
     ink: "rgba(190, 215, 255, 0.42)",
+    text: "hsl(45 80% 94%)",
   },
   fiery: {
     a: "hsl(10 88% 70%)",
@@ -42,6 +51,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(20 95% 65%)",
     d: "hsl(345 75% 50%)",
     ink: "rgba(70, 0, 5, 0.55)",
+    text: "hsl(40 95% 96%)",
   },
   bliss: {
     a: "hsl(320 75% 88%)",
@@ -49,6 +59,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(20 80% 90%)",
     d: "hsl(340 75% 92%)",
     ink: "rgba(130, 40, 110, 0.45)",
+    text: "hsl(320 55% 22%)",
   },
   deep: {
     a: "hsl(270 55% 40%)",
@@ -56,6 +67,7 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(290 50% 32%)",
     d: "hsl(240 60% 22%)",
     ink: "rgba(220, 200, 255, 0.40)",
+    text: "hsl(270 60% 94%)",
   },
   chill: {
     a: "hsl(150 55% 82%)",
@@ -63,8 +75,15 @@ const PALETTES: Record<Vibe, VibePalette> = {
     c: "hsl(130 45% 84%)",
     d: "hsl(190 55% 88%)",
     ink: "rgba(15, 70, 55, 0.50)",
+    text: "hsl(170 60% 14%)",
   },
 };
+
+/** High-contrast text color for the given vibe — used by elements whose
+ *  text sits directly on the background (chat input, credits, etc.). */
+export function getVibeTextColor(vibe: Vibe): string {
+  return PALETTES[vibe].text;
+}
 
 export function VibeBackground({ vibe }: { vibe: Vibe }) {
   const p = PALETTES[vibe];

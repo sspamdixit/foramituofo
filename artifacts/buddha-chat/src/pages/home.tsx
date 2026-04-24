@@ -9,7 +9,8 @@ import { ChatInput } from "@/components/chat-input";
 import { PreachPlayer } from "@/components/preach-player";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
-import { VibeBackground } from "@/components/vibe-background";
+import { VibeBackground, getVibeTextColor } from "@/components/vibe-background";
+import type { CSSProperties } from "react";
 import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
 
@@ -331,9 +332,18 @@ export default function Home() {
   }, [preachSong]);
 
   const vibe = useVibe(messages, musicText);
+  const vibeTextColor = getVibeTextColor(vibe);
+  const wrapperStyle: CSSProperties = {
+    // Exposed as a CSS var so any descendant whose text sits directly on
+    // the vibe background (chat input, credits) can pick a contrasting hue.
+    ["--vibe-text" as string]: vibeTextColor,
+  };
 
   return (
-    <div className="h-[100dvh] w-full relative overflow-hidden text-foreground">
+    <div
+      className="h-[100dvh] w-full relative overflow-hidden text-foreground"
+      style={wrapperStyle}
+    >
       {/* Vibe-aware adaptive background — colors shift with the chat AND the song */}
       <VibeBackground vibe={vibe} />
 
@@ -474,7 +484,10 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="text-center text-[11px] leading-tight text-foreground/40 pt-1 select-none">
+        <div
+          className="text-center text-[11px] leading-tight pt-1 select-none vibe-text-soft"
+          style={{ color: "var(--vibe-text)" }}
+        >
           <div>Created By: Atharv Dixit</div>
           <div>
             Inspired by:{" "}
@@ -482,7 +495,7 @@ export default function Home() {
               href="https://www.instagram.com/daily_buddha_preaching/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline decoration-dotted hover:text-foreground/70 transition-colors"
+              className="underline decoration-dotted hover:opacity-100 transition-opacity"
             >
               @daily_buddha_preaching
             </a>{" "}
@@ -491,7 +504,7 @@ export default function Home() {
               href="https://www.instagram.com/yawen.zen/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline decoration-dotted hover:text-foreground/70 transition-colors"
+              className="underline decoration-dotted hover:opacity-100 transition-opacity"
             >
               @yawen.zen
             </a>

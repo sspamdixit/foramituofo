@@ -480,12 +480,32 @@
 
 /* Minimal input: keep the placeholder fully visible in the same hand-drawn font */
 .minimal-input::placeholder {
-  color: hsl(var(--foreground));
+  color: var(--vibe-text, hsl(var(--foreground)));
   opacity: 0.95;
   font-family: var(--app-font-pencil);
 }
 .minimal-input:focus::placeholder {
   opacity: 0.55;
+}
+
+/* Smoothly transition the contrast color when the vibe shifts. The
+   --vibe-text variable itself isn't @property-registered, but transitioning
+   the resolved `color` works because both the var and computed color are
+   <color> values. */
+.vibe-text-strong,
+.vibe-text-soft {
+  transition: color 1.4s ease-in-out;
+}
+.minimal-input,
+.minimal-input::placeholder {
+  transition: color 1.4s ease-in-out, opacity 0.25s ease-out;
+}
+/* Default opacity for the soft credits line */
+.vibe-text-soft {
+  opacity: 0.55;
+}
+.vibe-text-soft:hover {
+  opacity: 0.85;
 }
 
 /* User-message bubble — softer pastel to contrast with the white "sacred" bubble */
