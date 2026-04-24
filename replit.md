@@ -6,7 +6,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Artifacts
 
-- **buddha-chat** (`/`) — Buddha Chat single-page web app. Centered cartoon Buddha sprite with placeholder PNGs in `artifacts/buddha-chat/public/` (`idle.png`, `thinking.png`, `speaking.png` — swap with real sprite files later). Chat reply logic is encapsulated in `useBuddhaChat` (frontend-only mock); plug Gemini + Groq calls into that hook later.
+- **buddha-chat** (`/`) — Buddha Chat single-page web app. Centered cartoon Buddha sprite with PNGs in `artifacts/buddha-chat/public/` (`idle`, `thinking`, `speaking`, `blessing`, `refusing`, plus `bubble.png` and `bg-tile.png`). Chat is wired to the API server (`POST /api/chat`) which streams Gemini responses (model: `gemini-2.5-flash`, fallback `gemini-2.5-flash-lite`) as SSE. The `useBuddhaChat` hook consumes the SSE stream and updates the buddha message text incrementally; the speech bubble component runs a fixed-rate typewriter that "chases" the streaming text. Safety blocks from Gemini are surfaced as a `refused` event and switch the sprite to the `refusing` pose with a fixed line.
+- **api-server** (`/api`) — Express 5. Routes: `GET /api/healthz`, `POST /api/chat`. Chat endpoint requires `GEMINI_API_KEY` secret and proxies a streaming Gemini call back to the client as SSE (`{type:"delta",text}`, `{type:"done"}`, `{type:"refused"}`, `{type:"error"}`).
 
 ## Stack
 

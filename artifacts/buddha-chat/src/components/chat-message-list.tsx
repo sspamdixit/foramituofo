@@ -12,28 +12,41 @@ const TYPEWRITER_SPEED_MS = 28;
 
 function useTypewriter(text: string, animate: boolean) {
   const [displayed, setDisplayed] = useState(animate ? "" : text);
+  const textRef = useRef(text);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Keep the latest target text in a ref so the interval always sees it
+  // even as the stream extends `text` over time.
   useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    textRef.current = text;
+  }, [text]);
 
+  useEffect(() => {
     if (!animate) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       setDisplayed(text);
       return;
     }
 
-    setDisplayed("");
-    let i = 0;
+    // If the target text no longer starts with what we've shown (a brand-new
+    // message), reset back to empty. Otherwise keep extending from where we
+    // are so the typewriter chases the streamed text.
+    setDisplayed((prev) => (text.startsWith(prev) ? prev : ""));
+
+    if (intervalRef.current) return;
     intervalRef.current = setInterval(() => {
-      i++;
-      setDisplayed(text.slice(0, i));
-      if (i >= text.length && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      setDisplayed((prev) => {
+        const target = textRef.current;
+        if (prev.length >= target.length) {
+          // Caught up — wait for more tokens (don't kill the interval; the
+          // stream might extend `target` shortly).
+          return prev;
+        }
+        return target.slice(0, prev.length + 1);
+      });
     }, TYPEWRITER_SPEED_MS);
 
     return () => {
@@ -50,11 +63,14 @@ function useTypewriter(text: string, animate: boolean) {
 function BuddhaSpeechBubble({
   text,
   animate,
+  isStreaming,
 }: {
   text: string;
   animate: boolean;
+  isStreaming: boolean;
 }) {
   const { displayed, done } = useTypewriter(text, animate);
+  const showCursor = animate && (isStreaming || !done);
 
   return (
     <motion.div
@@ -71,7 +87,7 @@ function BuddhaSpeechBubble({
     >
       <div className="px-10 pt-7 pb-20 text-foreground text-base md:text-lg leading-snug font-medium break-words">
         {displayed}
-        {animate && !done && (
+        {showCursor && (
           <span className="inline-block w-[2px] h-[1em] bg-foreground/70 align-middle ml-0.5 animate-pulse" />
         )}
       </div>
@@ -117,6 +133,7 @@ export function ChatMessageList({ messages, isTyping }: ChatMessageListProps) {
               <BuddhaSpeechBubble
                 text={msg.content}
                 animate={idx === lastBuddhaIdx}
+                isStreaming={!!msg.isStreaming}
               />
             )}
           </motion.div>
