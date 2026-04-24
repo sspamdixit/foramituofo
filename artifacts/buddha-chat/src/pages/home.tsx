@@ -58,7 +58,7 @@ function CurrentTeaching({
 }) {
   const { displayed, done } = useTypewriter(text, isLatest);
   return (
-    <SketchBubble width="min(560px, 92vw, 49vh)">
+    <SketchBubble width="100%" tailSide="right" tailY={0.7}>
       <span className="break-words">{displayed}</span>
       {isLatest && !done && (
         <span className="inline-block w-[2px] h-[0.9em] bg-foreground/70 align-middle ml-1 animate-pulse" />
@@ -70,7 +70,7 @@ function CurrentTeaching({
 /** Static (non-typewriter) bubble for click reactions and idle thoughts. */
 function StaticThought({ text }: { text: string }) {
   return (
-    <SketchBubble width="min(420px, 88vw, 40vh)">
+    <SketchBubble width="100%" tailSide="right" tailY={0.7}>
       <span className="break-words">{text}</span>
     </SketchBubble>
   );
@@ -268,56 +268,65 @@ export default function Home() {
         <LotusToggle active={preachMode} onToggle={togglePreach} />
       </div>
 
-      {/* Buddha — visual anchor; bubble floats above his head like a thought. */}
+      {/* Buddha — anchored right of center on desktop so the left half is
+          free for a properly-sized bubble. Centered on narrow screens. */}
       <div
         className={cn(
-          "absolute inset-0 z-20 flex items-center justify-center pointer-events-none px-4 pb-24",
+          "absolute inset-0 z-20 flex items-center pointer-events-none pb-24",
+          "justify-center md:justify-end px-4 md:pr-[7vw]",
           "buddha-fade-in",
         )}
       >
         <div className="relative pointer-events-auto">
-          {/* Bubble: bottom edge sits just above Buddha's head crown. */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 flex justify-center pointer-events-none"
-            style={{ bottom: "88%" }}
-          >
-            <AnimatePresence mode="wait">
-              {showBubble && override && (
-                <motion.div
-                  key={override.id}
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.3 } }}
-                  transition={{ duration: 0.45, ease: "easeOut" }}
-                >
-                  <StaticThought text={override.text} />
-                </motion.div>
-              )}
-              {showBubble && !override && latestBuddha && (
-                <motion.div
-                  key={latestBuddha.id}
-                  initial={{ opacity: 0, y: -8, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.35 } }}
-                  transition={{ duration: 0.7, ease: "easeOut" }}
-                >
-                  <CurrentTeaching
-                    text={latestBuddha.content}
-                    isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Buddha sprite — clickable head, hover halo, preach bounce. */}
           <BuddhaSprite
             state={buddhaState}
             preachMode={preachMode}
-            size="xl"
+            size="lg"
             onHeadClick={handleHeadClick}
           />
         </div>
+      </div>
+
+      {/* Bubble — floats top-left with a right-pointing tail toward Buddha.
+          Has plenty of horizontal room to expand and grows DOWNWARD so the
+          top of the screen is never clipped. */}
+      <div
+        className={cn(
+          "absolute z-30 pointer-events-none",
+          "left-1/2 -translate-x-1/2 md:left-[4vw] md:translate-x-0",
+        )}
+        style={{
+          top: "6vh",
+          width: "min(92vw, 520px)",
+        }}
+      >
+        <AnimatePresence mode="wait">
+          {showBubble && override && (
+            <motion.div
+              key={override.id}
+              initial={{ opacity: 0, y: -8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.3 } }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+            >
+              <StaticThought text={override.text} />
+            </motion.div>
+          )}
+          {showBubble && !override && latestBuddha && (
+            <motion.div
+              key={latestBuddha.id}
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.35 } }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+            >
+              <CurrentTeaching
+                text={latestBuddha.content}
+                isLatest={latestBuddha.isStreaming === true || buddhaState === "speaking"}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Bless-flash overlay */}

@@ -8,23 +8,28 @@ import {
 import rough from "roughjs";
 import { cn } from "@/lib/utils";
 
+type TailSide = "bottom" | "right";
+
 interface SketchBubbleProps {
   children: ReactNode;
   /**
    * CSS width for the bubble. Accepts a number (px) or any CSS length /
-   * `min()` / `clamp()` expression. The bubble's HEIGHT grows with the text
-   * content, so this only constrains horizontal size.
+   * `min()` / `clamp()` expression. Height auto-grows with content.
    */
   width?: number | string;
   /** Color of the sketched stroke. */
   stroke?: string;
-  /** Position of the tail along the bottom edge (0..1, 0=left, 1=right). */
+  /** Horizontal position of a BOTTOM tail (0..1, 0=left, 1=right). */
   tailX?: number;
+  /** Vertical position of a RIGHT tail (0..1, 0=top, 1=bottom). */
+  tailY?: number;
+  /** Which edge the tail comes out of. Default: "bottom". */
+  tailSide?: TailSide;
   className?: string;
 }
 
 const TREMBLE_INTERVAL_MS = 140;
-// How far the tail extends below the bubble body, in pixels.
+// How far the tail extends past the bubble body, in pixels.
 const TAIL_EXTRA = 36;
 // Vertical breathing room above and below the text inside the body.
 const BODY_PAD_Y = 18;
@@ -36,13 +41,17 @@ export function SketchBubble({
   width = 520,
   stroke = "#1a1a1a",
   tailX = 0.62,
+  tailY = 0.65,
+  tailSide = "bottom",
   className,
 }: SketchBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
-  // Measure the container; height auto-sizes to its text content.
+  const isRightTail = tailSide === "right";
+
+  // Measure container; height auto-sizes to content.
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -65,9 +74,9 @@ export function SketchBubble({
     const H = size.h;
     const bodyTop = 4;
     const bodyLeft = 4;
-    const bodyRight = W - 4;
-    const bodyBottom = H - TAIL_EXTRA;
-    if (bodyBottom <= bodyTop + 8) return;
+    const bodyRight = isRightTail ? W - TAIL_EXTRA : W - 4;
+    const bodyBottom = isRightTail ? H - 4 : H - TAIL_EXTRA;
+    if (bodyBottom <= bodyTop + 8 || bodyRight <= bodyLeft + 8) return;
     const r = Math.min(28, (bodyBottom - bodyTop) * 0.3);
 
     const baseSeed = Math.floor(Math.random() * 10_000);
@@ -92,20 +101,32 @@ export function SketchBubble({
         fillStyle: "solid",
       };
 
-      const cx = W * tailX;
-      const tipX = cx + 24;
-
-      // Tail: tip lands at the very bottom of the SVG so the wrapper can
-      // anchor it precisely above Buddha's head.
-      const tail = rc.polygon(
-        [
-          [cx - 22, bodyBottom - 8],
-          [tipX, H - 4],
-          [cx + 28, bodyBottom - 8],
-        ],
-        fillOpts,
-      );
-      svg.appendChild(tail);
+      // Tail — drawn first so the body covers its inner edge.
+      if (isRightTail) {
+        const cy = bodyTop + (bodyBottom - bodyTop) * tailY;
+        const tipY = cy + 14;
+        const tail = rc.polygon(
+          [
+            [bodyRight - 8, cy - 22],
+            [W - 4, tipY],
+            [bodyRight - 8, cy + 28],
+          ],
+          fillOpts,
+        );
+        svg.appendChild(tail);
+      } else {
+        const cx = W * tailX;
+        const tipX = cx + 24;
+        const tail = rc.polygon(
+          [
+            [cx - 22, bodyBottom - 8],
+            [tipX, H - 4],
+            [cx + 28, bodyBottom - 8],
+          ],
+          fillOpts,
+        );
+        svg.appendChild(tail);
+      }
 
       // Bubble body — rounded rect drawn as a hand-drawn path.
       const path = [
@@ -123,13 +144,25 @@ export function SketchBubble({
       const body = rc.path(path, fillOpts);
       svg.appendChild(body);
 
-      // White cover for the tail/body seam.
-      const cover = rc.line(cx - 18, bodyBottom, cx + 24, bodyBottom, {
-        ...opts,
-        stroke: "#ffffff",
-        strokeWidth: 4,
-      });
-      svg.appendChild(cover);
+      // White cover for the tail/body seam so the rough strokes don't show
+      // a visible joint where the tail attaches.
+      if (isRightTail) {
+        const cy = bodyTop + (bodyBottom - bodyTop) * tailY;
+        const cover = rc.line(bodyRight, cy - 18, bodyRight, cy + 24, {
+          ...opts,
+          stroke: "#ffffff",
+          strokeWidth: 4,
+        });
+        svg.appendChild(cover);
+      } else {
+        const cx = W * tailX;
+        const cover = rc.line(cx - 18, bodyBottom, cx + 24, bodyBottom, {
+          ...opts,
+          stroke: "#ffffff",
+          strokeWidth: 4,
+        });
+        svg.appendChild(cover);
+      }
     };
 
     const tick = (t: number) => {
@@ -146,16 +179,14 @@ export function SketchBubble({
     return () => {
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [size.w, size.h, stroke, tailX]);
+  }, [size.w, size.h, stroke, tailX, tailY, isRightTail]);
 
-  // Shift the whole bubble LEFT so the tail TIP — not the bubble center —
-  // sits at the container's horizontal midpoint. Tail tip's x within the
-  // bubble = tailX * W + 24, so the shift required = (tailX - 0.5) * W + 24.
-  // Expressed in CSS: percentage of own width (for the variable part) plus a
-  // fixed pixel offset (for the +24 tip overhang). This is exact at every
-  // viewport without depending on JS measurement timing.
-  const tailShiftPct = (tailX - 0.5) * 100; // e.g. 12 when tailX=0.62
-  const transform = `translateX(calc(${-tailShiftPct}% - 24px))`;
+  // For the BOTTOM tail, shift the whole bubble so the tail TIP sits at the
+  // container's horizontal midpoint (the original behavior). For the RIGHT
+  // tail the parent positions us absolutely, so no shift is needed.
+  const transform = isRightTail
+    ? undefined
+    : `translateX(calc(${-((tailX - 0.5) * 100)}% - 24px))`;
 
   return (
     <div
@@ -178,22 +209,16 @@ export function SketchBubble({
         className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
         aria-hidden="true"
       />
-      {/*
-        Text is in normal flow, so the container's height grows with the
-        content. Padding top == padding bottom (above the tail), so the text
-        sits exactly in the middle of the BODY rectangle, regardless of how
-        many lines it wraps to.
-      */}
       <div
         className="relative comic-text text-center break-words"
         style={{
           paddingTop: `${BODY_PAD_Y}px`,
-          paddingBottom: `${BODY_PAD_Y + TAIL_EXTRA}px`,
+          paddingBottom: `${BODY_PAD_Y + (isRightTail ? 0 : TAIL_EXTRA)}px`,
           paddingLeft: "7cqi",
-          paddingRight: "7cqi",
+          paddingRight: isRightTail ? `calc(7cqi + ${TAIL_EXTRA}px)` : "7cqi",
           fontSize: "clamp(0.95rem, 6.8cqi, 1.85rem)",
           lineHeight: 1.25,
-          minHeight: `${BODY_MIN_H + TAIL_EXTRA}px`,
+          minHeight: `${BODY_MIN_H + (isRightTail ? 0 : TAIL_EXTRA)}px`,
           // Center text within the min-height when the message is short.
           display: "flex",
           alignItems: "center",
