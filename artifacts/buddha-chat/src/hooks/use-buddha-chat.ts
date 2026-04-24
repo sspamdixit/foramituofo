@@ -29,14 +29,33 @@ export function useBuddhaChat() {
   const [isTyping, setIsTyping] = useState(false);
 
   const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overrideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+      if (overrideTimeoutRef.current) clearTimeout(overrideTimeoutRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
   }, []);
+
+  /**
+   * Force Buddha into a particular pose for `holdMs`, then return to idle.
+   * Used by click-reactions and the "bless" easter egg. If the chat hook is
+   * already mid-stream, the override still wins for visual purposes.
+   */
+  const setBuddhaStateOverride = useCallback(
+    (state: BuddhaState, holdMs: number) => {
+      if (overrideTimeoutRef.current) clearTimeout(overrideTimeoutRef.current);
+      setBuddhaState(state);
+      overrideTimeoutRef.current = setTimeout(() => {
+        setBuddhaState("idle");
+        overrideTimeoutRef.current = null;
+      }, holdMs);
+    },
+    [],
+  );
 
   const finishMessage = useCallback(
     (id: string, finalState: BuddhaState, finalText: string) => {
@@ -228,5 +247,6 @@ export function useBuddhaChat() {
     buddhaState,
     sendMessage,
     isTyping,
+    setBuddhaStateOverride,
   };
 }

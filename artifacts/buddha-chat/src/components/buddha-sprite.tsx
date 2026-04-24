@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { type BuddhaState } from "@/hooks/use-buddha-chat";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ interface BuddhaSpriteProps {
   state: BuddhaState;
   size?: "sm" | "md" | "lg" | "xl";
   preachMode?: boolean;
+  onHeadClick?: () => void;
 }
 
 // Sizes are viewport-relative so Buddha never crowds the bubble or input
@@ -26,7 +27,14 @@ const SIZE_CLASSES: Record<NonNullable<BuddhaSpriteProps["size"]>, string> = {
   xl: "w-[min(58vmin,28rem)] h-[min(58vmin,28rem)]",
 };
 
-export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaSpriteProps) {
+export function BuddhaSprite({
+  state,
+  size = "xl",
+  preachMode = false,
+  onHeadClick,
+}: BuddhaSpriteProps) {
+  const [hovering, setHovering] = useState(false);
+
   // Preload the other state sprites once so transitions are instant and we
   // don't see a flash of the old image while the next one downloads.
   useEffect(() => {
@@ -36,47 +44,70 @@ export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaS
     });
   }, []);
 
-  // Each state has its own dedicated sprite. While speaking we keep the
-  // "iPreach" pose steady (no flicker) and let the halo + a subtle bob carry
-  // the sense of motion. When refusing, the "no!" stance is shown.
   const src = SPRITE_MAP[state];
 
+  // Halo intensifies when hovering — like he's sensing your energy.
+  const haloScale =
+    preachMode
+      ? 1
+      : state === "speaking"
+        ? [1, 1.2, 1]
+        : state === "thinking"
+          ? [1, 1.05, 1]
+          : hovering
+            ? [1, 1.18, 1.05]
+            : 1;
+  const haloOpacity =
+    preachMode
+      ? 0.95
+      : state === "speaking"
+        ? [0.5, 0.8, 0.5]
+        : state === "thinking"
+          ? [0.3, 0.5, 0.3]
+          : hovering
+            ? [0.45, 0.75, 0.55]
+            : 0.3;
+
   return (
-    <div className={cn("relative flex items-center justify-center", SIZE_CLASSES[size])}>
-      {/* Soft, blurred halo — pulses slowly during preach mode */}
+    <motion.div
+      className={cn("relative flex items-center justify-center", SIZE_CLASSES[size])}
+      animate={
+        preachMode
+          ? { y: [0, -3, 0, 2, 0] }
+          : undefined
+      }
+      transition={
+        preachMode
+          ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
+          : undefined
+      }
+    >
+      {/* Soft, blurred halo — pulses slowly during preach mode, brighter on hover */}
       <motion.div
         className={cn(
           "absolute inset-0 rounded-full",
           preachMode
             ? "halo-pulse bg-amber-200/60 blur-[60px]"
-            : "blur-3xl bg-primary/10 dark:bg-primary/20",
+            : hovering
+              ? "blur-3xl bg-amber-300/30 dark:bg-amber-200/30"
+              : "blur-3xl bg-primary/10 dark:bg-primary/20",
         )}
         animate={
           preachMode
             ? undefined
             : {
-                scale:
-                  state === "speaking"
-                    ? [1, 1.2, 1]
-                    : state === "thinking"
-                      ? [1, 1.05, 1]
-                      : 1,
-                opacity:
-                  state === "speaking"
-                    ? [0.5, 0.8, 0.5]
-                    : state === "thinking"
-                      ? [0.3, 0.5, 0.3]
-                      : 0.3,
+                scale: haloScale,
+                opacity: haloOpacity,
               }
         }
         transition={{
-          duration: state === "speaking" ? 2 : 3,
+          duration: state === "speaking" ? 2 : hovering ? 1.6 : 3,
           repeat: Infinity,
           ease: "easeInOut",
         }}
       />
 
-      {/* Sprite — no breathing animation, just a subtle bob while thinking. */}
+      {/* Sprite — the head area is interactive (cursor + hover + click). */}
       <div className="relative z-10 w-full h-full">
         <img
           src={src}
@@ -84,10 +115,28 @@ export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaS
           className={cn(
             "w-full h-full object-contain drop-shadow-xl select-none",
             preachMode && "buddha-halo",
+            hovering && !preachMode && "buddha-hover-glow",
           )}
           draggable={false}
         />
+        {/* Invisible hit area over Buddha's head — top ~38% of the sprite.
+            Sits ABOVE pointer-events-none parents because we set it on the
+            element itself. The parent in home.tsx wraps with pointer-events:auto
+            on the sprite container. */}
+        {onHeadClick && (
+          <button
+            type="button"
+            aria-label="Poke the Buddha"
+            onClick={onHeadClick}
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
+            onFocus={() => setHovering(true)}
+            onBlur={() => setHovering(false)}
+            className="absolute left-[28%] right-[28%] top-[10%] h-[38%] rounded-full bg-transparent cursor-pointer focus:outline-none"
+            style={{ pointerEvents: "auto" }}
+          />
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

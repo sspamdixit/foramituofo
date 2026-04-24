@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from "react";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
+  onTypingChange?: (isTyping: boolean) => void;
   disabled?: boolean;
 }
 
-export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onTypingChange, disabled }: ChatInputProps) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -13,11 +14,17 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
     inputRef.current?.focus();
   }, []);
 
+  const setValue = (next: string) => {
+    setInput(next);
+    onTypingChange?.(next.length > 0);
+  };
+
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || disabled) return;
     onSendMessage(trimmed);
     setInput("");
+    onTypingChange?.(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -40,7 +47,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
           ref={inputRef}
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Speak your mind..."
           disabled={disabled}

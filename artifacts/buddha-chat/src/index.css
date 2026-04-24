@@ -244,6 +244,38 @@
   filter: drop-shadow(0 0 18px gold) drop-shadow(0 0 36px rgba(255, 200, 80, 0.5));
 }
 
+/* Subtle warm glow when hovering over Buddha's head — "sensing your energy" */
+.buddha-hover-glow {
+  filter: drop-shadow(0 0 12px rgba(255, 210, 130, 0.55))
+          drop-shadow(0 0 22px rgba(255, 180, 90, 0.35));
+  transition: filter 0.4s ease-out;
+}
+
+/* Screen-wide white flash for the "bless" easter egg */
+@keyframes bless-flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.92; }
+  60%  { opacity: 0.45; }
+  100% { opacity: 0; }
+}
+.bless-flash {
+  animation: bless-flash 1.6s ease-out forwards;
+  background: radial-gradient(circle at center, #fff8e0 0%, #ffe9a8 35%, rgba(255,200,80,0) 75%);
+}
+
+/* Talisman card: gentle bob so it feels alive, plus glow */
+@keyframes talisman-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.talisman-float {
+  animation: talisman-float 3.6s ease-in-out infinite;
+}
+.talisman-glow {
+  filter: drop-shadow(0 0 22px rgba(255, 200, 80, 0.55))
+          drop-shadow(0 0 60px rgba(255, 170, 80, 0.35));
+}
+
 /* Slow, soft pulse for the halo glow behind Buddha during preach mode */
 @keyframes halo-pulse {
   0%, 100% { opacity: 0.55; transform: scale(1); }
