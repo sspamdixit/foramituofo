@@ -62,10 +62,12 @@ export function useBuddhaChat() {
       setMessages((prev) => [...prev, buddhaMessage]);
       setIsTyping(false);
 
-      // Go back to idle after a short while
+      // Stay in "speaking" pose long enough for the typewriter reveal
+      // (~28ms/char in chat-message-list), then a small breath, then idle.
+      const speakingDuration = Math.max(2000, randomResponse.length * 28 + 1200);
       setTimeout(() => {
         setBuddhaState("idle");
-      }, 3000);
+      }, speakingDuration);
 
     }, thinkingTime);
   }, []);
