@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { type BuddhaState } from "@/hooks/use-buddha-chat";
 import { cn } from "@/lib/utils";
@@ -10,9 +10,6 @@ const SPRITE_MAP: Record<BuddhaState, string> = {
   blessing: `${import.meta.env.BASE_URL}blessing.png`,
   refusing: `${import.meta.env.BASE_URL}refusing.png`,
 };
-
-const QUIET_SRC = SPRITE_MAP.idle;
-const TALKING_SRC = SPRITE_MAP.speaking;
 
 interface BuddhaSpriteProps {
   state: BuddhaState;
@@ -30,24 +27,19 @@ const SIZE_CLASSES: Record<NonNullable<BuddhaSpriteProps["size"]>, string> = {
 };
 
 export function BuddhaSprite({ state, size = "xl", preachMode = false }: BuddhaSpriteProps) {
-  // Toggle between "quiet" and "talking" frames every 250ms while speaking,
-  // to fake a mouth animation in sync with the typewriter effect.
-  const [mouthOpen, setMouthOpen] = useState(false);
+  // Preload the other state sprites once so transitions are instant and we
+  // don't see a flash of the old image while the next one downloads.
   useEffect(() => {
-    if (state !== "speaking") {
-      setMouthOpen(false);
-      return;
-    }
-    const id = setInterval(() => setMouthOpen((o) => !o), 250);
-    return () => clearInterval(id);
-  }, [state]);
+    Object.values(SPRITE_MAP).forEach((url) => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, []);
 
-  const src =
-    state === "speaking"
-      ? mouthOpen
-        ? TALKING_SRC
-        : QUIET_SRC
-      : SPRITE_MAP[state];
+  // Each state has its own dedicated sprite. While speaking we keep the
+  // "iPreach" pose steady (no flicker) and let the halo + a subtle bob carry
+  // the sense of motion. When refusing, the "no!" stance is shown.
+  const src = SPRITE_MAP[state];
 
   return (
     <div className={cn("relative flex items-center justify-center", SIZE_CLASSES[size])}>
