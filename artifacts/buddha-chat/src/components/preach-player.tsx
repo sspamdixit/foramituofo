@@ -1,6 +1,14 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Pause, Play, SkipForward, Settings2 } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Rewind,
+  FastForward,
+  SkipBack,
+  SkipForward,
+  Settings2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PreachSong } from "@/hooks/use-preach-song";
 
@@ -12,6 +20,8 @@ interface PreachPlayerProps {
   duration: number;
   onTogglePlay: () => void;
   onSkip: () => void;
+  onPrevious: () => void;
+  onSeekBy: (delta: number) => void;
   onNudgeSync: (delta: number) => void;
   onSeek: (seconds: number) => void;
 }
@@ -24,7 +34,10 @@ function formatTime(t: number): string {
 }
 
 /** Bottom player. Modern dark-glass aesthetic — tall album art, large
- *  tactile transport, full progress bar (scrubbable), discreet sync popover. */
+ *  tactile transport, full progress bar (scrubbable), discreet sync popover.
+ *  Accent color (progress bar gradient + album-art glow) reads from the
+ *  CSS vars `--vibe-accent` / `--vibe-accent-2` so it always contrasts the
+ *  current vibe-driven background. */
 export function PreachPlayer({
   song,
   status,
@@ -33,6 +46,8 @@ export function PreachPlayer({
   duration,
   onTogglePlay,
   onSkip,
+  onPrevious,
+  onSeekBy,
   onNudgeSync,
   onSeek,
 }: PreachPlayerProps) {
@@ -70,7 +85,9 @@ export function PreachPlayer({
       )}
       style={{ fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif" }}
     >
-      {/* Progress bar — full-width, anchored at the top edge */}
+      {/* Progress bar — full-width, anchored at the top edge. Filled with
+          the current vibe's accent gradient so it pops off the dark glass
+          AND off whatever color the background just shifted to. */}
       <div
         ref={progressRef}
         role="slider"
@@ -95,27 +112,39 @@ export function PreachPlayer({
         )}
       >
         <div
-          className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-300 via-orange-300 to-rose-300 transition-[width] duration-200 ease-linear"
-          style={{ width: `${progressPct}%` }}
+          className="absolute inset-y-0 left-0 transition-[width] duration-200 ease-linear"
+          style={{
+            width: `${progressPct}%`,
+            background:
+              "linear-gradient(90deg, var(--vibe-accent, hsl(40 95% 60%)) 0%, var(--vibe-accent-2, hsl(15 90% 65%)) 100%)",
+          }}
         />
         {/* Scrub thumb — appears on hover/focus */}
         <div
           className={cn(
-            "absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow",
+            "absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow",
             "opacity-0 group-hover:opacity-100 transition-opacity",
             "pointer-events-none",
           )}
-          style={{ left: `calc(${progressPct}% - 6px)` }}
+          style={{
+            left: `calc(${progressPct}% - 6px)`,
+            background: "var(--vibe-accent, #fff)",
+            boxShadow: "0 0 0 2px rgba(255,255,255,0.85)",
+          }}
         />
       </div>
 
       <div className="flex items-center gap-3 md:gap-4 p-3 md:p-4">
-        {/* Album art with subtle glow that brightens while playing */}
+        {/* Album art with vibe-accent glow that brightens while playing */}
         <div className="relative shrink-0">
           <motion.div
             aria-hidden="true"
-            className="absolute -inset-1 rounded-xl bg-gradient-to-br from-amber-400/40 via-rose-400/30 to-fuchsia-500/30 blur-md"
-            animate={{ opacity: isPlaying ? 0.9 : 0.25 }}
+            className="absolute -inset-1 rounded-xl blur-md"
+            style={{
+              background:
+                "linear-gradient(135deg, var(--vibe-accent, hsl(40 95% 60%)) 0%, var(--vibe-accent-2, hsl(15 90% 65%)) 100%)",
+            }}
+            animate={{ opacity: isPlaying ? 0.7 : 0.2 }}
             transition={{ duration: 0.6 }}
           />
           {song?.artworkUrl ? (
@@ -128,11 +157,7 @@ export function PreachPlayer({
             />
           ) : (
             <div className="relative w-16 h-16 md:w-[72px] md:h-[72px] rounded-xl bg-stone-800 flex items-center justify-center text-stone-400 text-xl ring-1 ring-white/10">
-              {isLoading ? (
-                <span className="animate-pulse">♪</span>
-              ) : (
-                "♪"
-              )}
+              {isLoading ? <span className="animate-pulse">♪</span> : "♪"}
             </div>
           )}
         </div>
@@ -152,7 +177,13 @@ export function PreachPlayer({
                 <span className="text-white/25">/</span>
                 <span>{formatTime(duration)}</span>
                 {syncOffset !== 0 && (
-                  <span className="ml-1 px-1.5 py-px rounded-full bg-amber-400/15 text-amber-300 text-[10px] font-semibold">
+                  <span
+                    className="ml-1 px-1.5 py-px rounded-full text-[10px] font-semibold"
+                    style={{
+                      background: "color-mix(in oklab, var(--vibe-accent, #f5b342) 20%, transparent)",
+                      color: "var(--vibe-accent, #f5b342)",
+                    }}
+                  >
                     {syncOffset > 0 ? "+" : ""}
                     {syncOffset.toFixed(2)}s
                   </span>
@@ -172,25 +203,20 @@ export function PreachPlayer({
           )}
         </div>
 
-        {/* Transport — large tactile buttons */}
-        <div className="shrink-0 flex items-center gap-1.5 md:gap-2">
+        {/* Transport — large tactile buttons.
+            Layout: [settings] [-10s (md+)] [prev] [PLAY] [next] [+10s (md+)]
+            On narrow screens we hide the ±10s jumps to keep the row tidy. */}
+        <div className="shrink-0 flex items-center gap-1 md:gap-1.5">
           {/* Sync popover toggle */}
           <div className="relative">
-            <motion.button
-              type="button"
+            <SecondaryButton
               onClick={() => setShowSync((v) => !v)}
-              whileTap={{ scale: 0.92 }}
-              aria-label="Lyric sync"
+              ariaLabel="Lyric sync"
               title="Adjust lyric sync"
-              className={cn(
-                "w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center",
-                "text-white/60 hover:text-white hover:bg-white/10 active:bg-white/15",
-                "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-                showSync && "bg-white/10 text-white",
-              )}
+              active={showSync}
             >
               <Settings2 className="w-[18px] h-[18px]" />
-            </motion.button>
+            </SecondaryButton>
 
             {showSync && (
               <motion.div
@@ -199,7 +225,7 @@ export function PreachPlayer({
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 className={cn(
-                  "absolute bottom-full mb-3 right-0",
+                  "absolute bottom-full mb-3 right-0 z-10",
                   "rounded-2xl bg-stone-900/95 backdrop-blur-xl border border-white/10",
                   "shadow-xl p-3 w-[220px]",
                 )}
@@ -217,10 +243,13 @@ export function PreachPlayer({
                     −
                   </button>
                   <div
-                    className={cn(
-                      "tabular-nums text-sm font-semibold",
-                      syncOffset === 0 ? "text-white/45" : "text-amber-300",
-                    )}
+                    className="tabular-nums text-sm font-semibold"
+                    style={{
+                      color:
+                        syncOffset === 0
+                          ? "rgba(255,255,255,0.45)"
+                          : "var(--vibe-accent, #f5b342)",
+                    }}
                   >
                     {syncOffset > 0 ? "+" : ""}
                     {syncOffset.toFixed(2)}s
@@ -238,7 +267,30 @@ export function PreachPlayer({
             )}
           </div>
 
-          {/* Play / Pause — primary action */}
+          {/* −10s — desktop only */}
+          <div className="hidden md:block">
+            <SecondaryButton
+              onClick={() => onSeekBy(-10)}
+              ariaLabel="Back 10 seconds"
+              title="Back 10s"
+              disabled={!song}
+            >
+              <Rewind className="w-[18px] h-[18px]" />
+            </SecondaryButton>
+          </div>
+
+          {/* Previous track */}
+          <SecondaryButton
+            onClick={onPrevious}
+            ariaLabel="Previous song"
+            title="Previous"
+            disabled={!song}
+          >
+            <SkipBack className="w-[18px] h-[18px]" fill="currentColor" />
+          </SecondaryButton>
+
+          {/* Play / Pause — primary action, ringed in the vibe accent so it
+              also reads as a "this matches the moment" element. */}
           <motion.button
             type="button"
             onClick={onTogglePlay}
@@ -252,11 +304,14 @@ export function PreachPlayer({
               "relative w-12 h-12 md:w-[52px] md:h-[52px] rounded-full",
               "flex items-center justify-center",
               "bg-white text-stone-900",
-              "shadow-[0_6px_18px_-4px_rgba(255,255,255,0.35)]",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
               "disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none",
               "transition-shadow",
             )}
+            style={{
+              boxShadow:
+                "0 6px 18px -4px color-mix(in oklab, var(--vibe-accent, #fff) 50%, rgba(255,255,255,0.35))",
+            }}
           >
             {isPlaying ? (
               <Pause className="w-5 h-5" fill="currentColor" />
@@ -265,27 +320,70 @@ export function PreachPlayer({
             )}
           </motion.button>
 
-          {/* Skip */}
-          <motion.button
-            type="button"
+          {/* Next track */}
+          <SecondaryButton
             onClick={onSkip}
+            ariaLabel="Next song"
+            title="Next"
             disabled={!song && !isError}
-            aria-label="Skip to next song"
-            title="Skip to next song"
-            whileTap={{ scale: 0.9 }}
-            whileHover={{ scale: 1.06 }}
-            transition={{ type: "spring", stiffness: 400, damping: 22 }}
-            className={cn(
-              "w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center",
-              "text-white/75 hover:text-white hover:bg-white/10 active:bg-white/15",
-              "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-              "disabled:opacity-40 disabled:cursor-not-allowed",
-            )}
           >
-            <SkipForward className="w-[18px] h-[18px]" />
-          </motion.button>
+            <SkipForward className="w-[18px] h-[18px]" fill="currentColor" />
+          </SecondaryButton>
+
+          {/* +10s — desktop only */}
+          <div className="hidden md:block">
+            <SecondaryButton
+              onClick={() => onSeekBy(10)}
+              ariaLabel="Forward 10 seconds"
+              title="Forward 10s"
+              disabled={!song}
+            >
+              <FastForward className="w-[18px] h-[18px]" />
+            </SecondaryButton>
+          </div>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+/** Local helper — every secondary transport / settings button shares the
+ *  same hit area, hover treatment, and tap spring so the whole row feels
+ *  like one cohesive control surface. */
+function SecondaryButton({
+  onClick,
+  children,
+  ariaLabel,
+  title,
+  active,
+  disabled,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  ariaLabel: string;
+  title?: string;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      whileTap={{ scale: 0.9 }}
+      whileHover={{ scale: 1.06 }}
+      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      aria-label={ariaLabel}
+      title={title ?? ariaLabel}
+      className={cn(
+        "w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center",
+        "text-white/70 hover:text-white hover:bg-white/10 active:bg-white/15",
+        "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+        "disabled:opacity-40 disabled:cursor-not-allowed",
+        active && "bg-white/10 text-white",
+      )}
+    >
+      {children}
+    </motion.button>
   );
 }

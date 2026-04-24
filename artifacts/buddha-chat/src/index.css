@@ -489,12 +489,19 @@
 }
 
 /* Smoothly transition the contrast color when the vibe shifts. The
-   --vibe-text variable itself isn't @property-registered, but transitioning
-   the resolved `color` works because both the var and computed color are
-   <color> values. */
+   --vibe-text / --vibe-accent variables aren't @property-registered, but
+   transitioning the resolved `color` / `background-image` works because
+   both the var and computed color are <color> values. */
 .vibe-text-strong,
 .vibe-text-soft {
   transition: color 1.4s ease-in-out;
+}
+/* Player progress bar + album-art glow read directly from CSS vars; let
+   them tween between palettes instead of snapping. */
+.preach-vibe-tween,
+.preach-vibe-tween * {
+  transition: background-color 1.4s ease-in-out, color 1.4s ease-in-out,
+    box-shadow 1.4s ease-in-out;
 }
 .minimal-input,
 .minimal-input::placeholder {

@@ -112,15 +112,39 @@ export function usePreachSong(enabled: boolean) {
   const syncOffsetRef = useRef(0);
   syncOffsetRef.current = syncOffset;
 
+  // History stack of previously played songs so the "previous" transport
+  // can step back through what just played. Capped to keep memory bounded.
+  const historyRef = useRef<PreachSong[]>([]);
+  const HISTORY_MAX = 20;
+  // When set, the next song-fetch effect skips the network and uses this
+  // exact song instead. This is how `previous()` rewinds without hitting
+  // the API (and without repicking a random new song).
+  const queuedSongRef = useRef<PreachSong | null>(null);
+
   // ── Fetch a new song whenever enabled flips on, or skip is called ──
   useEffect(() => {
     if (!enabled) {
       setSong(null);
       setCurrentLine("");
       setStatus("idle");
+      historyRef.current = [];
+      queuedSongRef.current = null;
       return;
     }
     let cancelled = false;
+
+    // If `previous()` queued a specific song, use it directly.
+    const queued = queuedSongRef.current;
+    if (queued) {
+      queuedSongRef.current = null;
+      setSong(queued);
+      setCurrentLine("");
+      setCurrentTime(0);
+      setDuration(0);
+      setSyncOffset(loadOffset(queued.videoId));
+      return;
+    }
+
     setStatus("loading");
     fetch("/api/preach/song")
       .then((r) => {
@@ -129,7 +153,16 @@ export function usePreachSong(enabled: boolean) {
       })
       .then((data) => {
         if (cancelled) return;
-        setSong(data);
+        // Push the song that was just playing onto history before swapping.
+        setSong((prev) => {
+          if (prev && prev.videoId !== data.videoId) {
+            historyRef.current = [
+              ...historyRef.current.slice(-(HISTORY_MAX - 1)),
+              prev,
+            ];
+          }
+          return data;
+        });
         setCurrentLine("");
         setCurrentTime(0);
         setDuration(0);
@@ -233,15 +266,43 @@ export function usePreachSong(enabled: boolean) {
   }, [enabled, song?.videoId]);
 
   // ── Lyric sync loop ──
-  // A line is considered "currently being sung" only if the playhead is
-  // close enough to it. Specifically: it stays visible for up to BREAK_GAP
-  // seconds after its timestamp, OR until the next line is within
-  // BREAK_GAP seconds. Outside that window we're in an instrumental break
-  // (or intro/outro) and currentLine is set to "" so the UI can switch
-  // Buddha to the idle sprite and show a music-note in the bubble.
-  const BREAK_GAP = 6;
+  // Content-aware alignment: a line is the "current line" from its
+  // timestamp until either the next line starts OR an estimated singing
+  // duration (based on word count) elapses — whichever comes first.
+  //
+  // Why this matches the music more exactly than a fixed cutoff:
+  //   • Short interjections ("Oh!") clear quickly so we don't appear to
+  //     hold an empty syllable through the next 4 seconds of music.
+  //   • Long held finals ("hey jude…") stay visible the whole time the
+  //     vocalist is on that line, instead of vanishing after 6s.
+  //   • Genuine instrumental breaks (gap > estimated duration) yield to
+  //     the humming bubble so it's clear no one is singing right now.
+  //
+  // We also lead each line by a small PREROLL so the bubble appears at
+  // the same rAF frame the syllable is hit, not 50–100ms late.
+  const PREROLL = 0.08; // seconds — show the line slightly early
+  const MIN_LINE_DURATION = 1.6; // very short line still gets this much air
+  const MAX_LINE_DURATION = 9.0; // never hold a line past this
+  const SECONDS_PER_WORD = 0.42;
+
+  /** Estimate how long a vocalist will spend on a given lyric line. */
+  function estimateDuration(text: string): number {
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    const raw = words * SECONDS_PER_WORD + 0.4; // +0.4 for the line's tail
+    return Math.max(MIN_LINE_DURATION, Math.min(MAX_LINE_DURATION, raw));
+  }
+
   useEffect(() => {
     if (!enabled || !song) return;
+    // Pre-compute each line's effective end time so the rAF tick is O(1)
+    // instead of recomputing word counts every frame.
+    const lines = song.lyrics;
+    const ends: number[] = lines.map((l, i) => {
+      const nextStart = lines[i + 1]?.time ?? l.time + estimateDuration(l.text);
+      const estEnd = l.time + estimateDuration(l.text);
+      return Math.min(nextStart, estEnd);
+    });
+
     let lastText = "";
     let lastTimeUpdate = 0;
     let raf = 0;
@@ -265,17 +326,15 @@ export function usePreachSong(enabled: boolean) {
           setCurrentTime(t);
           if (d > 0) setDuration(d);
         }
-        const adjusted = t + syncOffsetRef.current;
-        const lines = song.lyrics;
+        const adjusted = t + syncOffsetRef.current + PREROLL;
+
+        // Find the latest line whose start has passed. If we're still
+        // within that line's effective end, that's the active line;
+        // otherwise we're in an instrumental gap → empty string.
         let active = "";
         for (let i = lines.length - 1; i >= 0; i--) {
-          if (adjusted + 0.05 >= lines[i].time) {
-            const nextTime = lines[i + 1]?.time ?? Infinity;
-            const elapsed = adjusted - lines[i].time;
-            const remaining = nextTime - adjusted;
-            // Visible while either the line just appeared OR the next line
-            // is coming soon. Otherwise we're in a break.
-            if (elapsed < BREAK_GAP || remaining < BREAK_GAP) {
+          if (adjusted >= lines[i].time) {
+            if (adjusted < ends[i]) {
               active = lines[i].text;
             }
             break;
@@ -293,6 +352,36 @@ export function usePreachSong(enabled: boolean) {
   }, [enabled, song]);
 
   const skip = useCallback(() => setSongNonce((n) => n + 1), []);
+
+  /** Skip-back transport. If we're more than ~3s into the current track,
+   *  rewind to the start (matches every standard music app's behavior).
+   *  Otherwise, pop the most recently played song off history and play
+   *  that instead. With an empty history, this falls through to a no-op
+   *  rewind so the button never feels dead. */
+  const previous = useCallback(() => {
+    const p = playerRef.current;
+    let t = 0;
+    try {
+      if (p && typeof p.getCurrentTime === "function") t = p.getCurrentTime();
+    } catch {
+      /* ignore */
+    }
+    if (t > 3 || historyRef.current.length === 0) {
+      if (p && typeof p.seekTo === "function") {
+        try {
+          p.seekTo(0, true);
+          setCurrentTime(0);
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+    const prevSong = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    queuedSongRef.current = prevSong;
+    setSongNonce((n) => n + 1);
+  }, []);
 
   const togglePlay = useCallback(() => {
     const p = playerRef.current;
@@ -327,6 +416,24 @@ export function usePreachSong(enabled: boolean) {
     }
   }, []);
 
+  /** Jump forward / backward by a relative number of seconds, clamped to
+   *  the song's duration. Used by the ±10s transport buttons. */
+  const seekBy = useCallback((delta: number) => {
+    const p = playerRef.current;
+    if (!p || typeof p.seekTo !== "function") return;
+    try {
+      const cur =
+        typeof p.getCurrentTime === "function" ? p.getCurrentTime() : 0;
+      const dur =
+        typeof p.getDuration === "function" ? p.getDuration() : Infinity;
+      const next = Math.max(0, Math.min(dur || Infinity, cur + delta));
+      p.seekTo(next, true);
+      setCurrentTime(next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   return {
     song,
     currentLine,
@@ -335,8 +442,10 @@ export function usePreachSong(enabled: boolean) {
     currentTime,
     duration,
     skip,
+    previous,
     togglePlay,
     nudgeSync,
     seekTo,
+    seekBy,
   };
 }

@@ -18,6 +18,14 @@ type VibePalette = {
    * against the underlying wash.
    */
   text: string;
+  /**
+   * Accent color that *contrasts* the background — used by the music
+   * player for progress bar, album-art glow, and active states. Warm
+   * palettes get a cool accent; cool palettes get a warm accent.
+   */
+  accent: string;
+  /** Secondary accent for gradients on the progress bar. */
+  accent2: string;
 };
 
 const PALETTES: Record<Vibe, VibePalette> = {
@@ -28,6 +36,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(45 80% 95%)",
     ink: "rgba(85, 55, 25, 0.55)",
     text: "hsl(28 45% 18%)",
+    accent: "hsl(190 75% 50%)",
+    accent2: "hsl(220 80% 60%)",
   },
   joyful: {
     a: "hsl(42 95% 80%)",
@@ -36,6 +46,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(50 100% 90%)",
     ink: "rgba(150, 60, 10, 0.55)",
     text: "hsl(18 70% 18%)",
+    accent: "hsl(170 70% 45%)",
+    accent2: "hsl(200 80% 55%)",
   },
   melancholy: {
     a: "hsl(225 55% 38%)",
@@ -44,6 +56,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(220 60% 22%)",
     ink: "rgba(190, 215, 255, 0.42)",
     text: "hsl(45 80% 94%)",
+    accent: "hsl(40 95% 62%)",
+    accent2: "hsl(15 90% 65%)",
   },
   fiery: {
     a: "hsl(10 88% 70%)",
@@ -52,6 +66,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(345 75% 50%)",
     ink: "rgba(70, 0, 5, 0.55)",
     text: "hsl(40 95% 96%)",
+    accent: "hsl(190 85% 60%)",
+    accent2: "hsl(255 75% 70%)",
   },
   bliss: {
     a: "hsl(320 75% 88%)",
@@ -60,6 +76,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(340 75% 92%)",
     ink: "rgba(130, 40, 110, 0.45)",
     text: "hsl(320 55% 22%)",
+    accent: "hsl(160 65% 48%)",
+    accent2: "hsl(180 70% 50%)",
   },
   deep: {
     a: "hsl(270 55% 40%)",
@@ -68,6 +86,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(240 60% 22%)",
     ink: "rgba(220, 200, 255, 0.40)",
     text: "hsl(270 60% 94%)",
+    accent: "hsl(45 95% 62%)",
+    accent2: "hsl(345 85% 65%)",
   },
   chill: {
     a: "hsl(150 55% 82%)",
@@ -76,6 +96,8 @@ const PALETTES: Record<Vibe, VibePalette> = {
     d: "hsl(190 55% 88%)",
     ink: "rgba(15, 70, 55, 0.50)",
     text: "hsl(170 60% 14%)",
+    accent: "hsl(15 90% 60%)",
+    accent2: "hsl(335 80% 62%)",
   },
 };
 
@@ -83,6 +105,12 @@ const PALETTES: Record<Vibe, VibePalette> = {
  *  text sits directly on the background (chat input, credits, etc.). */
 export function getVibeTextColor(vibe: Vibe): string {
   return PALETTES[vibe].text;
+}
+
+/** Pair of accent colors that contrast the current background — used by
+ *  the player for its progress gradient, album-art glow, and active states. */
+export function getVibeAccents(vibe: Vibe): { accent: string; accent2: string } {
+  return { accent: PALETTES[vibe].accent, accent2: PALETTES[vibe].accent2 };
 }
 
 export function VibeBackground({ vibe }: { vibe: Vibe }) {

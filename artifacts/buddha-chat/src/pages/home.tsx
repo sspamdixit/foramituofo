@@ -9,7 +9,7 @@ import { ChatInput } from "@/components/chat-input";
 import { PreachPlayer } from "@/components/preach-player";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
-import { VibeBackground, getVibeTextColor } from "@/components/vibe-background";
+import { VibeBackground, getVibeTextColor, getVibeAccents } from "@/components/vibe-background";
 import type { CSSProperties } from "react";
 import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
@@ -165,9 +165,11 @@ export default function Home() {
     currentTime: preachCurrentTime,
     duration: preachDuration,
     skip: skipSong,
+    previous: previousSong,
     togglePlay: togglePreachPlay,
     nudgeSync: nudgePreachSync,
     seekTo: seekPreachTo,
+    seekBy: seekPreachBy,
   } = usePreachSong(true);
 
   // True while a song is actively playing audio (not paused / loading / error).
@@ -333,10 +335,14 @@ export default function Home() {
 
   const vibe = useVibe(messages, musicText);
   const vibeTextColor = getVibeTextColor(vibe);
+  const vibeAccents = getVibeAccents(vibe);
   const wrapperStyle: CSSProperties = {
-    // Exposed as a CSS var so any descendant whose text sits directly on
-    // the vibe background (chat input, credits) can pick a contrasting hue.
+    // Exposed as CSS vars so any descendant — chat input, credits, music
+    // player progress / glow — can pick colors that contrast the current
+    // vibe-driven background.
     ["--vibe-text" as string]: vibeTextColor,
+    ["--vibe-accent" as string]: vibeAccents.accent,
+    ["--vibe-accent-2" as string]: vibeAccents.accent2,
   };
 
   return (
@@ -463,6 +469,8 @@ export default function Home() {
           duration={preachDuration}
           onTogglePlay={togglePreachPlay}
           onSkip={skipSong}
+          onPrevious={previousSong}
+          onSeekBy={seekPreachBy}
           onNudgeSync={nudgePreachSync}
           onSeek={seekPreachTo}
         />
