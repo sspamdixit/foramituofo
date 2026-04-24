@@ -227,6 +227,13 @@ export function usePreachSong(enabled: boolean) {
   }, [enabled, song?.videoId]);
 
   // ── Lyric sync loop ──
+  // A line is considered "currently being sung" only if the playhead is
+  // close enough to it. Specifically: it stays visible for up to BREAK_GAP
+  // seconds after its timestamp, OR until the next line is within
+  // BREAK_GAP seconds. Outside that window we're in an instrumental break
+  // (or intro/outro) and currentLine is set to "" so the UI can switch
+  // Buddha to the idle sprite and show a music-note in the bubble.
+  const BREAK_GAP = 6;
   useEffect(() => {
     if (!enabled || !song) return;
     let lastText = "";
@@ -240,14 +247,19 @@ export function usePreachSong(enabled: boolean) {
         } catch {
           /* ignore */
         }
-        // Apply the sync offset: positive offset = lyrics arrive earlier
-        // (i.e. the video has a longer intro than the album).
         const adjusted = t + syncOffsetRef.current;
         const lines = song.lyrics;
         let active = "";
         for (let i = lines.length - 1; i >= 0; i--) {
           if (adjusted + 0.05 >= lines[i].time) {
-            active = lines[i].text;
+            const nextTime = lines[i + 1]?.time ?? Infinity;
+            const elapsed = adjusted - lines[i].time;
+            const remaining = nextTime - adjusted;
+            // Visible while either the line just appeared OR the next line
+            // is coming soon. Otherwise we're in a break.
+            if (elapsed < BREAK_GAP || remaining < BREAK_GAP) {
+              active = lines[i].text;
+            }
             break;
           }
         }

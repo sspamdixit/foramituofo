@@ -74,6 +74,64 @@ function StaticThought({ text }: { text: string }) {
   );
 }
 
+/** Hand-drawn double eighth-note (the 🎶 shape, but as SVG so it inherits the
+ *  hand-drawn vibe of everything else). Shown in the bubble during instrumental
+ *  breaks while Buddha is "humming". */
+function MusicNoteIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 80 64"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* Left filled note head */}
+      <ellipse
+        cx="20"
+        cy="48"
+        rx="7.5"
+        ry="5.5"
+        fill="currentColor"
+        transform="rotate(-22 20 48)"
+      />
+      {/* Right filled note head */}
+      <ellipse
+        cx="50"
+        cy="44"
+        rx="7.5"
+        ry="5.5"
+        fill="currentColor"
+        transform="rotate(-22 50 44)"
+      />
+      {/* Left stem */}
+      <line x1="27" y1="46" x2="27" y2="14" />
+      {/* Right stem */}
+      <line x1="57" y1="42" x2="57" y2="10" />
+      {/* Beam connecting the two stems at the top */}
+      <path d="M27 14 L57 10 L57 19 L27 23 Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Bubble content for an instrumental break — a gently bobbing music-note */
+function HummingBubble() {
+  return (
+    <SketchBubble width="100%" tailSide="right" tailY={0.7}>
+      <motion.span
+        className="inline-flex items-center justify-center w-full text-stone-700"
+        animate={{ y: [0, -4, 0] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <MusicNoteIcon className="w-14 h-14" />
+      </motion.span>
+    </SketchBubble>
+  );
+}
+
 type OverrideBubble = {
   id: string;
   text: string;
@@ -221,17 +279,28 @@ export default function Home() {
   }, []);
 
   // ── Bubble selection logic ────────────────────────────────────────
-  // Priority: preach lyric > override (click/idle) > Buddha's chat reply.
-  // While the user is typing, dissolve the chat bubble too.
-  const preachActive = preachMode && preachLine.trim().length > 0;
+  // Priority: click reaction > preach content > Buddha's chat reply.
+  // In preach mode the bubble is ALWAYS visible: a lyric line if one is
+  // currently being sung, otherwise a music-note icon (instrumental break).
+  const preachSinging = preachMode && preachLine.trim().length > 0;
+  const preachHumming = preachMode && !!preachSong && !preachSinging;
   const showBubble =
-    preachActive ||
+    preachMode ||
     !!override ||
     (!!latestBuddha &&
       latestBuddha.content.length > 0 &&
       !isTyping &&
       !userTyping &&
       buddhaState !== "thinking");
+
+  // Override Buddha's sprite while preach mode is on:
+  //   singing  → speaking sprite (mouth moving)
+  //   humming  → idle sprite (calm)
+  const effectiveBuddhaState: BuddhaState = preachMode
+    ? preachSinging
+      ? "speaking"
+      : "idle"
+    : buddhaState;
 
   const tilePath = `${import.meta.env.BASE_URL}bg-tile.png`;
   const vibe = useVibe(messages);
@@ -289,7 +358,7 @@ export default function Home() {
       >
         <div className="relative pointer-events-auto">
           <BuddhaSprite
-            state={buddhaState}
+            state={effectiveBuddhaState}
             preachMode={preachMode}
             size="lg"
             onHeadClick={handleHeadClick}
@@ -311,18 +380,7 @@ export default function Home() {
         }}
       >
         <AnimatePresence mode="wait">
-          {showBubble && preachActive && (
-            <motion.div
-              key={`preach-${preachLine}`}
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4, transition: { duration: 0.25 } }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-            >
-              <StaticThought text={preachLine} />
-            </motion.div>
-          )}
-          {showBubble && !preachActive && override && (
+          {showBubble && override && (
             <motion.div
               key={override.id}
               initial={{ opacity: 0, y: -8, scale: 0.95 }}
@@ -333,7 +391,29 @@ export default function Home() {
               <StaticThought text={override.text} />
             </motion.div>
           )}
-          {showBubble && !preachActive && !override && latestBuddha && (
+          {showBubble && !override && preachSinging && (
+            <motion.div
+              key={`preach-line-${preachLine}`}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4, transition: { duration: 0.25 } }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <StaticThought text={preachLine} />
+            </motion.div>
+          )}
+          {showBubble && !override && preachHumming && (
+            <motion.div
+              key="preach-humming"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4, transition: { duration: 0.25 } }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <HummingBubble />
+            </motion.div>
+          )}
+          {showBubble && !override && !preachMode && latestBuddha && (
             <motion.div
               key={latestBuddha.id}
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
