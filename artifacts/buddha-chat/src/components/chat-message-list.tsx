@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { type ChatMessage } from "@/hooks/use-buddha-chat";
 import { cn } from "@/lib/utils";
-import { ThoughtBubble } from "@/components/thought-bubble";
+import { ComicBubble } from "@/components/comic-bubble";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -57,9 +57,9 @@ export function useTypewriter(text: string, animate: boolean) {
 
 function HistoryBuddhaBubble({ text }: { text: string }) {
   return (
-    <ThoughtBubble size="sm">
-      <div className="break-words">{text}</div>
-    </ThoughtBubble>
+    <ComicBubble mood="speak" size="sm">
+      <span className="break-words">{text}</span>
+    </ComicBubble>
   );
 }
 
