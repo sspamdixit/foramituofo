@@ -328,13 +328,30 @@
   overflow: hidden;
 }
 
-/* Original sandstone tile pattern, tinted by the current vibe color
-   via 'multiply' so the tile's texture stays visible while the mood
-   color shows through it. */
-.vibe-pattern {
+/* Procedural woven micro-pattern (SVG fills with two coprime
+   pattern sizes + turbulence displacement). currentColor lets each
+   stitch pick up the per-vibe --vibe-ink so it recolors with the mood.
+   No raster tile = no visible seams. */
+.vibe-weave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+  color: var(--vibe-ink);
   mix-blend-mode: multiply;
-  opacity: 0.95;
+  transition: color 2.4s ease-in-out;
+}
+/* On dark vibes (melancholy / deep / fiery) the ink is a light color,
+   which 'multiply' would erase. Use 'screen' instead so light stitches
+   show on the dark wash. */
+.vibe-bg:has(> .vibe-weave) {
+  /* fallback baseline if :has() unsupported */
+}
+.vibe-bg[style*="hsl(220 60% 22%)"] .vibe-weave,
+.vibe-bg[style*="hsl(240 60% 22%)"] .vibe-weave,
+.vibe-bg[style*="hsl(345 75% 50%)"] .vibe-weave {
+  mix-blend-mode: screen;
 }
 
 /* ─── Comic panel: hand-drawn ink frame around the whole viewport ───── */
