@@ -68,10 +68,43 @@ router.post("/chat", async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  // Try the primary model, then fall back to a lighter one on overload.
-  const modelChain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  // Long fallback cycle of free, fast Gemini models. Order: try the latest
+  // flagship flashes first (highest quality), then drop down through older
+  // generations and lighter variants. If everything is rate-limited, we'll
+  // have at least tried ~10 distinct quotas before giving up.
+  const modelChain = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash-lite-001",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-8b",
+    "gemini-1.5-flash-8b-latest",
+  ];
   let stream: AsyncGenerator<{ text?: string; candidates?: any[]; promptFeedback?: any }> | null = null;
   let lastError: unknown = null;
+  let modelUsed: string | null = null;
+
+  // Detect quota / rate-limit / overload errors so we *only* fall through on
+  // those — not on, say, a malformed-request error which would repeat forever.
+  const isTransient = (err: unknown) => {
+    const msg = String((err as { message?: string })?.message ?? err ?? "").toLowerCase();
+    return (
+      msg.includes("quota") ||
+      msg.includes("rate") ||
+      msg.includes("overload") ||
+      msg.includes("unavailable") ||
+      msg.includes("resource_exhausted") ||
+      msg.includes("429") ||
+      msg.includes("503") ||
+      msg.includes("500")
+    );
+  };
 
   for (const model of modelChain) {
     try {
@@ -84,11 +117,20 @@ router.post("/chat", async (req, res) => {
           maxOutputTokens: 8192,
         },
       });
+      modelUsed = model;
       break;
     } catch (err) {
       lastError = err;
       req.log.warn({ err, model }, "Gemini model unavailable, trying next");
+      if (!isTransient(err)) {
+        // Non-quota errors won't be fixed by trying the next model.
+        break;
+      }
     }
+  }
+
+  if (modelUsed) {
+    req.log.info({ model: modelUsed }, "Gemini model selected");
   }
 
   if (!stream) {
