@@ -468,6 +468,29 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+        <div className="text-center text-[11px] leading-tight text-foreground/40 pt-1 select-none">
+          <div>Created By: Atharv Dixit</div>
+          <div>
+            Inspired by:{" "}
+            <a
+              href="https://www.instagram.com/daily_buddha_preaching/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted hover:text-foreground/70 transition-colors"
+            >
+              @daily_buddha_preaching
+            </a>{" "}
+            and{" "}
+            <a
+              href="https://www.instagram.com/yawen.zen/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted hover:text-foreground/70 transition-colors"
+            >
+              @yawen.zen
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );
