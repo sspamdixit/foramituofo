@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { GoogleGenAI } from "@google/genai";
 
 const router: IRouter = Router();
 
@@ -16,6 +17,14 @@ Style:
 type ChatRole = "user" | "buddha";
 type IncomingMessage = { role: ChatRole; content: string };
 
+const ai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+  },
+});
+
 router.post("/chat", async (req, res) => {
   const body = req.body as {
     history?: IncomingMessage[];
@@ -25,12 +34,6 @@ router.post("/chat", async (req, res) => {
   const message = body.message?.trim();
   if (!message) {
     res.status(400).json({ error: "message is required" });
-    return;
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: "GEMINI_API_KEY not configured" });
     return;
   }
 
@@ -53,97 +56,60 @@ router.post("/chat", async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  const requestBody = JSON.stringify({
-    contents,
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    generationConfig: {
-      temperature: 0.85,
-      maxOutputTokens: 220,
-    },
-  });
-
   // Try the primary model, then fall back to a lighter one on overload.
   const modelChain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
-  let geminiRes: Response | null = null;
-  let lastError: { status: number; body: string } | null = null;
+  let stream: AsyncGenerator<{ text?: string; candidates?: any[]; promptFeedback?: any }> | null = null;
+  let lastError: unknown = null;
 
   for (const model of modelChain) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
     try {
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: requestBody,
+      stream = await ai.models.generateContentStream({
+        model,
+        contents,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.85,
+          maxOutputTokens: 8192,
+        },
       });
-      if (r.ok && r.body) {
-        geminiRes = r;
-        break;
-      }
-      const text = await r.text().catch(() => "");
-      lastError = { status: r.status, body: text.slice(0, 500) };
-      req.log.warn({ model, status: r.status }, "Gemini model unavailable, trying next");
-      // Only retry on overload / rate-limit / server errors
-      if (![429, 500, 502, 503, 504].includes(r.status)) break;
+      break;
     } catch (err) {
-      req.log.warn({ err, model }, "Gemini fetch failed, trying next");
+      lastError = err;
+      req.log.warn({ err, model }, "Gemini model unavailable, trying next");
     }
   }
 
-  if (!geminiRes || !geminiRes.body) {
+  if (!stream) {
     req.log.error({ lastError }, "All Gemini models unavailable");
     send({ type: "error", message: "The wise one is silent right now." });
     res.end();
     return;
   }
 
-  const reader = geminiRes.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let refused = false;
   let sentAny = false;
 
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+    for await (const chunk of stream) {
+      const candidate = chunk.candidates?.[0];
+      const finishReason = candidate?.finishReason;
+      const blockReason = chunk.promptFeedback?.blockReason;
 
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      if (
+        blockReason ||
+        finishReason === "SAFETY" ||
+        finishReason === "PROHIBITED_CONTENT" ||
+        finishReason === "BLOCKLIST" ||
+        finishReason === "RECITATION"
+      ) {
+        refused = true;
+        continue;
+      }
 
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        const dataStr = line.slice(5).trim();
-        if (!dataStr) continue;
-
-        try {
-          const data = JSON.parse(dataStr);
-          const candidate = data.candidates?.[0];
-          const finishReason = candidate?.finishReason;
-          const blockReason = data.promptFeedback?.blockReason;
-
-          if (
-            blockReason ||
-            finishReason === "SAFETY" ||
-            finishReason === "PROHIBITED_CONTENT" ||
-            finishReason === "BLOCKLIST" ||
-            finishReason === "RECITATION"
-          ) {
-            refused = true;
-            continue;
-          }
-
-          const parts = candidate?.content?.parts as
-            | Array<{ text?: string }>
-            | undefined;
-          const text = parts?.map((p) => p.text ?? "").join("") ?? "";
-          if (text) {
-            sentAny = true;
-            send({ type: "delta", text });
-          }
-        } catch (e) {
-          req.log.warn({ err: e, line }, "Failed to parse Gemini SSE line");
-        }
+      const text = chunk.text ?? "";
+      if (text) {
+        sentAny = true;
+        send({ type: "delta", text });
       }
     }
   } catch (err) {
