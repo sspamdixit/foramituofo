@@ -6,7 +6,6 @@ import { useVibe } from "@/hooks/use-vibe";
 import { usePreachSong } from "@/hooks/use-preach-song";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
-import { LotusToggle } from "@/components/lotus-toggle";
 import { PreachPlayer } from "@/components/preach-player";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
@@ -89,7 +88,6 @@ function MusicNoteIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {/* Left filled note head */}
       <ellipse
         cx="20"
         cy="48"
@@ -98,7 +96,6 @@ function MusicNoteIcon({ className }: { className?: string }) {
         fill="currentColor"
         transform="rotate(-22 20 48)"
       />
-      {/* Right filled note head */}
       <ellipse
         cx="50"
         cy="44"
@@ -107,11 +104,8 @@ function MusicNoteIcon({ className }: { className?: string }) {
         fill="currentColor"
         transform="rotate(-22 50 44)"
       />
-      {/* Left stem */}
       <line x1="27" y1="46" x2="27" y2="14" />
-      {/* Right stem */}
       <line x1="57" y1="42" x2="57" y2="10" />
-      {/* Beam connecting the two stems at the top */}
       <path d="M27 14 L57 10 L57 19 L27 23 Z" fill="currentColor" stroke="none" />
     </svg>
   );
@@ -141,7 +135,6 @@ type OverrideBubble = {
 function pickRandom<T>(arr: T[], avoid?: T): T {
   if (arr.length === 1) return arr[0];
   let pick = arr[Math.floor(Math.random() * arr.length)];
-  // Avoid repeating the same idle line back-to-back when possible.
   let safety = 4;
   while (avoid !== undefined && pick === avoid && safety-- > 0) {
     pick = arr[Math.floor(Math.random() * arr.length)];
@@ -152,7 +145,6 @@ function pickRandom<T>(arr: T[], avoid?: T): T {
 export default function Home() {
   const { messages, buddhaState, sendMessage, isTyping, setBuddhaStateOverride } =
     useBuddhaChat();
-  const [preachMode, setPreachMode] = useState(false);
   const [userTyping, setUserTyping] = useState(false);
   const [override, setOverride] = useState<OverrideBubble | null>(null);
   const [showFlash, setShowFlash] = useState(false);
@@ -162,6 +154,22 @@ export default function Home() {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastIdleLineRef = useRef<string | undefined>(undefined);
+
+  // Music is the centerpiece of monkradio — auto-play, always on.
+  const {
+    song: preachSong,
+    currentLine: preachLine,
+    status: preachStatus,
+    syncOffset: preachSyncOffset,
+    skip: skipSong,
+    togglePlay: togglePreachPlay,
+    nudgeSync: nudgePreachSync,
+  } = usePreachSong(true);
+
+  // True while a song is actively playing audio (not paused / loading / error).
+  const musicPlaying = preachStatus === "playing";
+  // Whenever a song is loaded (regardless of play state). Used for sprite + bubble routing.
+  const hasSong = !!preachSong;
 
   const latestBuddha = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -183,13 +191,15 @@ export default function Home() {
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => {
-      // Only fire if Buddha isn't actively doing something else.
+      // Don't drop idle thoughts on top of an existing override OR while
+      // music is actively playing (we don't want non-lyric chatter mid-song).
       if (override) return;
+      if (musicPlaying) return;
       const line = pickRandom(IDLE_LINES, lastIdleLineRef.current);
       lastIdleLineRef.current = line;
       setOverride({ id: `idle-${Date.now()}`, text: line, source: "idle" });
     }, IDLE_DELAY_MS);
-  }, [override]);
+  }, [override, musicPlaying]);
 
   // Kick off and reset on activity.
   useEffect(() => {
@@ -198,6 +208,14 @@ export default function Home() {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, [resetIdleTimer, messages.length, userTyping]);
+
+  // If music starts playing, immediately tear down any active idle bubble so
+  // the only thing showing during a song is the lyric / humming bubble.
+  useEffect(() => {
+    if (musicPlaying) {
+      setOverride((cur) => (cur ? null : cur));
+    }
+  }, [musicPlaying]);
 
   // Auto-clear an idle bubble after a while so the chat bubble can return.
   useEffect(() => {
@@ -215,23 +233,18 @@ export default function Home() {
     playChime();
   }, [latestBuddha?.id, latestBuddha?.content.length]);
 
-  const togglePreach = () => {
-    setPreachMode((prev) => !prev);
-  };
-
-  // Hidden YouTube playback + synced lyrics whenever preach mode is on
-  const {
-    song: preachSong,
-    currentLine: preachLine,
-    status: preachStatus,
-    syncOffset: preachSyncOffset,
-    skip: skipSong,
-    togglePlay: togglePreachPlay,
-    nudgeSync: nudgePreachSync,
-  } = usePreachSong(preachMode);
-
   // ── Click reactions on Buddha's head ──────────────────────────────
   const handleHeadClick = useCallback(() => {
+    // Don't show pop-up reactions while a song is playing — only lyrics
+    // belong in the bubble during playback. The sprite still acknowledges
+    // the poke briefly, but no text bubble appears.
+    if (musicPlaying) {
+      const reaction = HEAD_REACTIONS[reactionIdxRef.current % HEAD_REACTIONS.length];
+      reactionIdxRef.current++;
+      setBuddhaStateOverride(reaction.state, REACTION_HOLD_MS);
+      return;
+    }
+
     const reaction = HEAD_REACTIONS[reactionIdxRef.current % HEAD_REACTIONS.length];
     reactionIdxRef.current++;
 
@@ -242,7 +255,7 @@ export default function Home() {
     reactionTimerRef.current = setTimeout(() => {
       setOverride((cur) => (cur && cur.source === "click" ? null : cur));
     }, REACTION_HOLD_MS);
-  }, [setBuddhaStateOverride]);
+  }, [setBuddhaStateOverride, musicPlaying]);
 
   // ── "bless" easter egg ────────────────────────────────────────────
   const triggerTalisman = useCallback(() => {
@@ -261,7 +274,6 @@ export default function Home() {
       setOverride(null);
       if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current);
 
-      // Easter-egg: any message containing "bless" as a whole word.
       if (/\bbless\b/i.test(text)) {
         triggerTalisman();
       }
@@ -278,74 +290,49 @@ export default function Home() {
     }
   }, []);
 
-  // ── Bubble selection logic ────────────────────────────────────────
-  // Priority: click reaction > preach content > Buddha's chat reply.
-  // In preach mode the bubble is ALWAYS visible: a lyric line if one is
-  // currently being sung, otherwise a music-note icon (instrumental break).
-  const preachSinging = preachMode && preachLine.trim().length > 0;
-  const preachHumming = preachMode && !!preachSong && !preachSinging;
-  const showBubble =
-    preachMode ||
-    !!override ||
-    (!!latestBuddha &&
-      latestBuddha.content.length > 0 &&
-      !isTyping &&
-      !userTyping &&
-      buddhaState !== "thinking");
+  // ── Bubble routing ────────────────────────────────────────────────
+  // While music is actively playing: ONLY lyric / humming bubbles are
+  // allowed — no idle thoughts, no click reactions, no chat replies.
+  // While music is paused (or no song yet): the chat experience returns
+  // and we can show overrides + Buddha's chat replies as usual.
+  const preachSinging = musicPlaying && preachLine.trim().length > 0;
+  const preachHumming = musicPlaying && hasSong && !preachSinging;
 
-  // Override Buddha's sprite while preach mode is on:
+  const showLyricBubble = preachSinging;
+  const showHummingBubble = preachHumming;
+  const showOverrideBubble = !musicPlaying && !!override;
+  const showBuddhaReplyBubble =
+    !musicPlaying &&
+    !override &&
+    !!latestBuddha &&
+    latestBuddha.content.length > 0 &&
+    !isTyping &&
+    !userTyping &&
+    buddhaState !== "thinking";
+
+  // Buddha's sprite mirrors the audio:
   //   singing  → speaking sprite (mouth moving)
   //   humming  → idle sprite (calm)
-  const effectiveBuddhaState: BuddhaState = preachMode
+  //   no music or paused → driven by chat state
+  const effectiveBuddhaState: BuddhaState = musicPlaying
     ? preachSinging
       ? "speaking"
       : "idle"
     : buddhaState;
 
-  const tilePath = `${import.meta.env.BASE_URL}bg-tile.png`;
-  const vibe = useVibe(messages);
+  // Concatenated lyrics feed the vibe engine so the background hue
+  // also reflects the song currently playing — not just the chat.
+  const musicText = useMemo(() => {
+    if (!preachSong) return "";
+    return preachSong.lyrics.map((l) => l.text).join(" ");
+  }, [preachSong]);
+
+  const vibe = useVibe(messages, musicText);
 
   return (
     <div className="h-[100dvh] w-full relative overflow-hidden text-foreground">
-      {/* Vibe-aware adaptive background — colors shift with the conversation */}
-      <VibeBackground vibe={preachMode ? "calm" : vibe} />
-
-      {/* PREACH MODE: full-screen sunset wash + sun rays + horizon glow + grain */}
-      <AnimatePresence>
-        {preachMode && (
-          <motion.div
-            key="preach-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.7 }}
-            className="absolute inset-0 z-10 pointer-events-none preach-bg"
-          >
-            {/* Soft golden sun rays radiating slowly from upper-right */}
-            <div className="absolute inset-0 preach-rays" aria-hidden="true" />
-            {/* Warm horizon band glowing low across the screen */}
-            <div className="absolute inset-0 preach-horizon" aria-hidden="true" />
-            {/* Drifting wisps of cloud */}
-            <div className="absolute inset-0 preach-clouds" aria-hidden="true" />
-            {/* Vignette to draw the eye toward Buddha */}
-            <div className="absolute inset-0 preach-vignette" aria-hidden="true" />
-            {/* Riso-grain layer (softer, slower than before) */}
-            <div
-              className="absolute inset-0 preach-grain"
-              style={{
-                backgroundImage: `url(${tilePath})`,
-                backgroundRepeat: "repeat",
-                backgroundSize: "256px 256px",
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Lotus toggle pinned top-right */}
-      <div className="absolute top-3 right-3 z-40">
-        <LotusToggle active={preachMode} onToggle={togglePreach} />
-      </div>
+      {/* Vibe-aware adaptive background — colors shift with the chat AND the song */}
+      <VibeBackground vibe={vibe} />
 
       {/* Buddha — anchored right of center on desktop so the left half is
           free for a properly-sized bubble. Centered on narrow screens. */}
@@ -359,16 +346,13 @@ export default function Home() {
         <div className="relative pointer-events-auto">
           <BuddhaSprite
             state={effectiveBuddhaState}
-            preachMode={preachMode}
             size="lg"
             onHeadClick={handleHeadClick}
           />
         </div>
       </div>
 
-      {/* Bubble — floats top-left with a right-pointing tail toward Buddha.
-          Has plenty of horizontal room to expand and grows DOWNWARD so the
-          top of the screen is never clipped. */}
+      {/* Bubble — floats top-left with a right-pointing tail toward Buddha. */}
       <div
         className={cn(
           "absolute z-30 pointer-events-none",
@@ -380,7 +364,7 @@ export default function Home() {
         }}
       >
         <AnimatePresence mode="wait">
-          {showBubble && override && (
+          {showOverrideBubble && override && (
             <motion.div
               key={override.id}
               initial={{ opacity: 0, y: -8, scale: 0.95 }}
@@ -391,7 +375,7 @@ export default function Home() {
               <StaticThought text={override.text} />
             </motion.div>
           )}
-          {showBubble && !override && preachSinging && (
+          {showLyricBubble && (
             <motion.div
               key={`preach-line-${preachLine}`}
               initial={{ opacity: 0, y: -6 }}
@@ -402,7 +386,7 @@ export default function Home() {
               <StaticThought text={preachLine} />
             </motion.div>
           )}
-          {showBubble && !override && preachHumming && (
+          {showHummingBubble && (
             <motion.div
               key="preach-humming"
               initial={{ opacity: 0, y: -6 }}
@@ -413,7 +397,7 @@ export default function Home() {
               <HummingBubble />
             </motion.div>
           )}
-          {showBubble && !override && !preachMode && latestBuddha && (
+          {showBuddhaReplyBubble && latestBuddha && (
             <motion.div
               key={latestBuddha.id}
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
@@ -429,7 +413,6 @@ export default function Home() {
           )}
         </AnimatePresence>
       </div>
-
 
       {/* Bless-flash overlay */}
       <AnimatePresence>
@@ -452,36 +435,30 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* BOTTOM AREA — chat input by default, music player while preach mode is on */}
+      {/* BOTTOM AREA — music player is always pinned here. When the song is
+          paused, the chat input slides in just BELOW the player so the user
+          can talk to Buddha without losing the now-playing context. */}
       <div
-        className="absolute inset-x-0 bottom-0 z-30 px-4 md:px-6"
+        className="absolute inset-x-0 bottom-0 z-30 px-4 md:px-6 flex flex-col items-stretch gap-2"
         style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
       >
-        <AnimatePresence mode="wait">
-          {preachMode ? (
+        <PreachPlayer
+          song={preachSong}
+          status={preachStatus}
+          syncOffset={preachSyncOffset}
+          onTogglePlay={togglePreachPlay}
+          onSkip={skipSong}
+          onNudgeSync={nudgePreachSync}
+        />
+        <AnimatePresence>
+          {!musicPlaying && (
             <motion.div
-              key="preach-player"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
-            >
-              <PreachPlayer
-                song={preachSong}
-                status={preachStatus}
-                syncOffset={preachSyncOffset}
-                onTogglePlay={togglePreachPlay}
-                onSkip={skipSong}
-                onNudgeSync={nudgePreachSync}
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="chat-input"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              key="chat-input-paused"
+              initial={{ opacity: 0, y: 12, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: 12, height: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="overflow-hidden"
             >
               <ChatInput
                 onSendMessage={handleSend}

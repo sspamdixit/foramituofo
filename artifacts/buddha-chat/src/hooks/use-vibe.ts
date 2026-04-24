@@ -86,16 +86,21 @@ function scoreVibes(text: string): Record<Exclude<Vibe, "calm">, number> {
 }
 
 /**
- * Pick the vibe of the recent conversation.
+ * Pick the vibe of the recent conversation, optionally blended with the
+ * vibe of a song's lyrics so the background reacts to both the chat tone
+ * AND the music currently playing.
+ *
  * - Looks at the last 6 messages
  * - Weights more recent messages heavier
  * - Considers the user's words first, then Buddha's reply
+ * - If `musicText` is provided (e.g. concatenated lyrics), it's folded in
+ *   with a moderate weight so music can drive the mood when chat is quiet.
  * - Returns "calm" when nothing notable lights up
  */
-export function useVibe(messages: ChatMessage[]): Vibe {
+export function useVibe(messages: ChatMessage[], musicText?: string): Vibe {
   return useMemo(() => {
     const recent = messages.slice(-6);
-    if (recent.length === 0) return "calm";
+    if (recent.length === 0 && !musicText) return "calm";
 
     const totals: Record<Exclude<Vibe, "calm">, number> = {
       joyful: 0,
@@ -115,6 +120,15 @@ export function useVibe(messages: ChatMessage[]): Vibe {
       }
     });
 
+    if (musicText && musicText.trim().length > 0) {
+      const scores = scoreVibes(musicText);
+      // Lyrics tend to repeat keywords, so dampen each hit. Still strong
+      // enough to drive the mood when no chat activity is happening.
+      for (const v of VIBE_PRIORITY) {
+        totals[v] += scores[v] * 0.35;
+      }
+    }
+
     let best: Exclude<Vibe, "calm"> | null = null;
     let bestScore = 0;
     for (const v of VIBE_PRIORITY) {
@@ -126,5 +140,5 @@ export function useVibe(messages: ChatMessage[]): Vibe {
 
     if (best && bestScore >= 1) return best;
     return "calm";
-  }, [messages]);
+  }, [messages, musicText]);
 }
