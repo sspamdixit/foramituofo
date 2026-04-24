@@ -1,72 +1,23 @@
-import { useRef, useEffect } from "react";
-import { AnimatePresence } from "framer-motion";
-import { useBuddhaChat, type BuddhaState } from "@/hooks/use-buddha-chat";
+import { useEffect, useRef, useState } from "react";
+import { useBuddhaChat } from "@/hooks/use-buddha-chat";
 import { BuddhaSprite } from "@/components/buddha-sprite";
-import { ChatMessageList, useTypewriter } from "@/components/chat-message-list";
+import { ChatMessageList } from "@/components/chat-message-list";
 import { ChatInput } from "@/components/chat-input";
-import { ComicBubble, type BubbleMood } from "@/components/comic-bubble";
+import { LotusToggle } from "@/components/lotus-toggle";
+import { cn } from "@/lib/utils";
 
-function moodForState(state: BuddhaState): BubbleMood {
-  switch (state) {
-    case "thinking":
-      return "think";
-    case "blessing":
-      return "bless";
-    case "refusing":
-      return "refuse";
-    case "speaking":
-    case "idle":
-    default:
-      return "speak";
-  }
-}
-
-function LatestThought({
-  text,
-  isStreaming,
-  mood,
-}: {
-  text: string;
-  isStreaming: boolean;
-  mood: BubbleMood;
-}) {
-  const { displayed, done } = useTypewriter(text, true);
-  const showCursor = isStreaming || !done;
-
-  return (
-    <ComicBubble mood={mood} showTrail size="lg">
-      <span className="break-words">{displayed}</span>
-      {showCursor && (
-        <span className="inline-block w-[2px] h-[1em] bg-foreground/70 align-middle ml-1 animate-pulse" />
-      )}
-    </ComicBubble>
-  );
-}
-
-function ThinkingThought() {
-  return (
-    <ComicBubble mood="think" showTrail size="sm">
-      <span className="inline-flex items-center gap-2 px-2 py-1">
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:-0.3s]" />
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:-0.15s]" />
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-foreground/40 animate-bounce" />
-      </span>
-    </ComicBubble>
-  );
+/** Stub for hooking up YouTube/Spotify in the future. */
+function playPreachMusic(active: boolean) {
+  // TODO: integrate with YouTube IFrame Player API or Spotify Web Playback SDK.
+  // For now we just log so the wiring is visible.
+  // eslint-disable-next-line no-console
+  console.info(`[playPreachMusic] preach mode is now ${active ? "ON" : "OFF"}`);
 }
 
 export default function Home() {
   const { messages, buddhaState, sendMessage, isTyping } = useBuddhaChat();
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Find the latest buddha message to render as the floating thought.
-  let lastBuddha: (typeof messages)[number] | null = null;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "buddha") {
-      lastBuddha = messages[i];
-      break;
-    }
-  }
+  const [preachMode, setPreachMode] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -77,75 +28,81 @@ export default function Home() {
     }
   }, [messages, isTyping]);
 
+  const togglePreach = () => {
+    setPreachMode((prev) => {
+      const next = !prev;
+      playPreachMusic(next);
+      return next;
+    });
+  };
+
   return (
     <div
-      className="h-[100dvh] w-full flex flex-col text-foreground overflow-hidden relative"
-      style={{
-        backgroundImage: `url(${import.meta.env.BASE_URL}bg-tile.png)`,
-        backgroundRepeat: "repeat",
-        backgroundSize: "256px 256px",
-      }}
+      className={cn(
+        "h-[100dvh] w-full flex flex-col text-foreground overflow-hidden relative",
+        preachMode && "preach-bg",
+      )}
+      style={
+        preachMode
+          ? undefined
+          : {
+              backgroundImage: `url(${import.meta.env.BASE_URL}bg-tile.png)`,
+              backgroundRepeat: "repeat",
+              backgroundSize: "256px 256px",
+            }
+      }
     >
-      <main className="flex-1 min-h-0 flex flex-col w-full max-w-7xl mx-auto px-4 py-4 md:py-6 z-10">
-        {/* Two-column area: chat list on the left, buddha + floating bubble on the right */}
-        <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-4 md:gap-6">
-          {/* LEFT: Conversation history (scrolls independently) */}
+      {/* Lotus toggle pinned top-right */}
+      <div className="absolute top-3 right-3 z-30">
+        <LotusToggle active={preachMode} onToggle={togglePreach} />
+      </div>
+
+      {/* Main split-screen: chat 60% (left) | buddha 40% (right). Stacks on mobile. */}
+      <main className="flex-1 min-h-0 w-full flex flex-col md:flex-row max-w-[1600px] mx-auto">
+        {/* CHAT COLUMN: 60% on desktop, bottom half on mobile */}
+        <section className="flex flex-col min-h-0 flex-1 md:basis-3/5 md:max-w-[60%] order-2 md:order-1 px-3 md:px-6 pt-2 md:pt-6 pb-3 md:pb-6">
           <div
             ref={scrollRef}
-            className="w-full md:w-2/5 md:max-w-md min-h-0 flex-1 md:flex-none overflow-y-auto no-scrollbar order-2 md:order-1"
+            className="flex-1 min-h-0 overflow-y-auto no-scrollbar"
             style={{
               maskImage:
-                "linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)",
+                "linear-gradient(to bottom, transparent, black 5%, black 95%, transparent)",
               WebkitMaskImage:
-                "-webkit-linear-gradient(top, transparent, black 6%, black 94%, transparent)",
+                "-webkit-linear-gradient(top, transparent, black 5%, black 95%, transparent)",
             }}
           >
-            <div className="min-h-full flex flex-col justify-end pb-4 pr-2">
-              <ChatMessageList
-                messages={messages}
-                isTyping={isTyping}
-                hideLatestBuddha
-              />
+            <div className="min-h-full flex flex-col justify-end">
+              <ChatMessageList messages={messages} isTyping={isTyping} />
             </div>
           </div>
 
-          {/* RIGHT: Buddha + floating bubble (positioned relative to the sprite itself) */}
-          <div className="flex-1 min-h-0 flex items-end justify-end pr-2 md:pr-6 pb-2 order-1 md:order-2 overflow-visible">
-            {/* Buddha + bubble share the same positioning context so the tail
-                always lines up with his head regardless of viewport size. */}
-            <div className="relative">
-              <BuddhaSprite state={buddhaState} size="xl" />
-
-              {/* Floating bubble — tail tip lands just left of Buddha's head center.
-                  Buddha's head sits roughly at 18% from top, 50% horizontally inside the sprite. */}
-              <div
-                className="absolute z-20 w-[15rem] md:w-[17rem] lg:w-[19rem] pointer-events-none"
-                style={{
-                  right: "calc(50% + 1.5rem)",
-                  top: "18%",
-                  transform: "translateY(-50%)",
-                }}
-              >
-                <AnimatePresence mode="wait">
-                  {lastBuddha && lastBuddha.content.length > 0 ? (
-                    <LatestThought
-                      key={lastBuddha.id}
-                      text={lastBuddha.content}
-                      isStreaming={!!lastBuddha.isStreaming}
-                      mood={moodForState(buddhaState)}
-                    />
-                  ) : isTyping ? (
-                    <ThinkingThought key="thinking" />
-                  ) : null}
-                </AnimatePresence>
-              </div>
-            </div>
+          {/* Input pinned to bottom of the chat column */}
+          <div
+            className="w-full shrink-0 pt-3"
+            style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+          >
+            <ChatInput onSendMessage={sendMessage} disabled={isTyping} />
           </div>
-        </div>
+        </section>
 
-        <div className="w-full shrink-0 pt-3 pb-2">
-          <ChatInput onSendMessage={sendMessage} disabled={isTyping} />
-        </div>
+        {/* BUDDHA COLUMN: 40% on desktop (sticky/fixed feel), top strip on mobile */}
+        <aside
+          className={cn(
+            "flex items-end md:items-center justify-center md:justify-end shrink-0",
+            "order-1 md:order-2 md:basis-2/5 md:max-w-[40%]",
+            "px-2 md:px-6 pt-3 md:pt-0 pb-1 md:pb-0",
+            // On mobile use a smaller fixed strip; on desktop fill the column
+            "h-[34vh] md:h-auto md:self-stretch",
+          )}
+        >
+          {/* On mobile, use a smaller sprite size */}
+          <div className="hidden md:block">
+            <BuddhaSprite state={buddhaState} size="xl" preachMode={preachMode} />
+          </div>
+          <div className="md:hidden">
+            <BuddhaSprite state={buddhaState} size="md" preachMode={preachMode} />
+          </div>
+        </aside>
       </main>
     </div>
   );
