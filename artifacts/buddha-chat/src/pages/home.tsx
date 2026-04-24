@@ -79,20 +79,20 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-[100dvh] w-full flex flex-col text-foreground overflow-hidden relative"
+      className="h-[100dvh] w-full flex flex-col text-foreground overflow-hidden relative"
       style={{
         backgroundImage: `url(${import.meta.env.BASE_URL}bg-tile.png)`,
         backgroundRepeat: "repeat",
         backgroundSize: "256px 256px",
       }}
     >
-      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto px-4 py-4 md:py-6 z-10 min-h-[100dvh]">
+      <main className="flex-1 min-h-0 flex flex-col w-full max-w-7xl mx-auto px-4 py-4 md:py-6 z-10">
         {/* Two-column area: chat list on the left, buddha + floating bubble on the right */}
-        <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 overflow-hidden">
-          {/* LEFT: Conversation history */}
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-4 md:gap-6">
+          {/* LEFT: Conversation history (scrolls independently) */}
           <div
             ref={scrollRef}
-            className="w-full md:w-2/5 md:max-w-md overflow-y-auto no-scrollbar order-2 md:order-1"
+            className="w-full md:w-2/5 md:max-w-md min-h-0 flex-1 md:flex-none overflow-y-auto no-scrollbar order-2 md:order-1"
             style={{
               maskImage:
                 "linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)",
@@ -109,25 +109,37 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: Buddha + floating bubble (tail points right at buddha) */}
-          <div className="flex-1 flex items-center justify-end gap-2 md:gap-4 pr-2 md:pr-6 order-1 md:order-2 min-h-[20rem]">
-            {/* Reserved bubble slot so buddha doesn't shift when it appears */}
-            <div className="flex-1 max-w-[22rem] md:max-w-[26rem] flex justify-end items-center">
-              <AnimatePresence mode="wait">
-                {lastBuddha && lastBuddha.content.length > 0 ? (
-                  <LatestThought
-                    key={lastBuddha.id}
-                    text={lastBuddha.content}
-                    isStreaming={!!lastBuddha.isStreaming}
-                    mood={moodForState(buddhaState)}
-                  />
-                ) : isTyping ? (
-                  <ThinkingThought key="thinking" />
-                ) : null}
-              </AnimatePresence>
-            </div>
+          {/* RIGHT: Buddha + floating bubble (positioned relative to the sprite itself) */}
+          <div className="flex-1 min-h-0 flex items-end justify-end pr-2 md:pr-6 pb-2 order-1 md:order-2 overflow-visible">
+            {/* Buddha + bubble share the same positioning context so the tail
+                always lines up with his head regardless of viewport size. */}
+            <div className="relative">
+              <BuddhaSprite state={buddhaState} size="xl" />
 
-            <BuddhaSprite state={buddhaState} size="xl" />
+              {/* Floating bubble — tail tip lands just left of Buddha's head center.
+                  Buddha's head sits roughly at 18% from top, 50% horizontally inside the sprite. */}
+              <div
+                className="absolute z-20 w-[15rem] md:w-[17rem] lg:w-[19rem] pointer-events-none"
+                style={{
+                  right: "calc(50% + 1.5rem)",
+                  top: "18%",
+                  transform: "translateY(-50%)",
+                }}
+              >
+                <AnimatePresence mode="wait">
+                  {lastBuddha && lastBuddha.content.length > 0 ? (
+                    <LatestThought
+                      key={lastBuddha.id}
+                      text={lastBuddha.content}
+                      isStreaming={!!lastBuddha.isStreaming}
+                      mood={moodForState(buddhaState)}
+                    />
+                  ) : isTyping ? (
+                    <ThinkingThought key="thinking" />
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         </div>
 
