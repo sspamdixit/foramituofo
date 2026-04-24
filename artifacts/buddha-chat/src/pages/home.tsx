@@ -236,7 +236,7 @@ export default function Home() {
       {/* Vibe-aware adaptive background — colors shift with the conversation */}
       <VibeBackground vibe={preachMode ? "calm" : vibe} />
 
-      {/* PREACH MODE: full-screen sunset wash + grain */}
+      {/* PREACH MODE: full-screen sunset wash + sun rays + horizon glow + grain */}
       <AnimatePresence>
         {preachMode && (
           <motion.div
@@ -244,9 +244,18 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.7 }}
             className="absolute inset-0 z-10 pointer-events-none preach-bg"
           >
+            {/* Soft golden sun rays radiating slowly from upper-right */}
+            <div className="absolute inset-0 preach-rays" aria-hidden="true" />
+            {/* Warm horizon band glowing low across the screen */}
+            <div className="absolute inset-0 preach-horizon" aria-hidden="true" />
+            {/* Drifting wisps of cloud */}
+            <div className="absolute inset-0 preach-clouds" aria-hidden="true" />
+            {/* Vignette to draw the eye toward Buddha */}
+            <div className="absolute inset-0 preach-vignette" aria-hidden="true" />
+            {/* Riso-grain layer (softer, slower than before) */}
             <div
               className="absolute inset-0 preach-grain"
               style={{

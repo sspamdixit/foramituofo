@@ -20,14 +20,14 @@ export function LotusToggle({ active, onToggle }: LotusToggleProps) {
       aria-label={active ? "Disable preach mode" : "Enable preach mode"}
       title={active ? "Preach mode is ON" : "Enable preach mode"}
       className={cn(
-        "relative w-12 h-12 rounded-full flex items-center justify-center",
+        "relative w-16 h-16 rounded-full flex items-center justify-center",
         "border-2 transition-colors duration-300 shadow-lg backdrop-blur",
         active
           ? "bg-amber-200/90 border-amber-500 text-rose-700"
           : "bg-white/85 border-stone-400 text-stone-600 hover:bg-white",
       )}
     >
-      <LotusIcon className="w-7 h-7" />
+      <LotusIcon className="w-10 h-10" />
       {active && (
         <span
           aria-hidden
