@@ -1,4 +1,22 @@
 import { Router, type IRouter } from "express";
+import { Readable } from "node:stream";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { existsSync } from "node:fs";
+
+const execFileAsync = promisify(execFile);
+
+/** Locate the yt-dlp binary installed by pip in the Replit Python libs dir. */
+function findYtdlp(): string {
+  const candidates = [
+    "/home/runner/workspace/.pythonlibs/bin/yt-dlp",
+    "/usr/local/bin/yt-dlp",
+    "/usr/bin/yt-dlp",
+    "yt-dlp", // fallback – rely on PATH
+  ];
+  return candidates.find((p) => p === "yt-dlp" || existsSync(p)) ?? "yt-dlp";
+}
+const YTDLP = findYtdlp();
 
 const router: IRouter = Router();
 
@@ -6,7 +24,7 @@ type LyricLine = { time: number; text: string };
 
 /** A pool of well-known artists across genres / eras. The picker grabs one
  *  at random, then asks lrclib for that artist's catalog of synced lyrics
- *  and YouTube for a matching video — so any popular track from these
+ *  and Lavalink for a matching audio track — so any popular track from these
  *  artists can come up, not just a hand-curated 12. Add more freely. */
 const ARTISTS: string[] = [
   // Hip-hop / rap
@@ -45,7 +63,7 @@ const ARTISTS: string[] = [
   "Tame Impala", "MGMT", "Vampire Weekend", "Arcade Fire", "Fleet Foxes",
   "The National", "Beach House", "Mitski", "Lana Del Rey", "Lorde",
   "Alex G", "Big Thief", "boygenius", "Death Cab for Cutie",
-  "Modest Mouse", "Sufjan Stevens", "Yeah Yeah Yeahs",
+  "Modest Mouse", "Yeah Yeah Yeahs",
   // Electronic / dance
   "Daft Punk", "Disclosure", "Flume", "ODESZA", "Bonobo", "Kaytranada",
   "Justice", "M83", "James Blake", "Burial", "Four Tet",
@@ -60,7 +78,7 @@ const ARTISTS: string[] = [
   "Louis Armstrong", "Norah Jones",
 ];
 
-// ─── lrclib types ───────────────────────────────────────────────────
+// ─── lrclib types ────────────────────────────────────────────────────────────
 type LrcLibSearchResult = {
   id: number;
   trackName: string;
@@ -148,9 +166,6 @@ async function fetchSyncedSongsForArtist(
       (d) =>
         !!d.syncedLyrics &&
         !d.instrumental &&
-        // Loose artist match — lrclib's `q=` matches across fields, so
-        // a "Kanye West" search can return Nicki Minaj feat. Kanye. We
-        // only want tracks whose artist actually IS our pick.
         norm(d.artistName).includes(target),
     );
   } catch {
@@ -158,53 +173,143 @@ async function fetchSyncedSongsForArtist(
   }
 }
 
-// In-memory cache: "<artist>::<title>" → videoId. Persists for the life of
-// the server; populated on first lookup, hit on every subsequent play of
-// the same song. Cuts a YouTube round-trip out of repeat plays.
-const videoIdCache = new Map<string, string>();
+// ─── Lavalink public nodes ────────────────────────────────────────────────────
+// These are freely-shared community Lavalink v4 nodes. Multiple nodes are
+// tried in order so a single outage doesn't block track resolution.
+type LavalinkNode = {
+  host: string;
+  port: number;
+  password: string;
+  secure: boolean;
+};
+
+const LAVALINK_NODES: LavalinkNode[] = [
+  { host: "lavalink.devamop.in",       port: 443,   password: "DevamOP",                 secure: true  },
+  { host: "lava.link",                port: 80,    password: "discloud",                secure: false },
+  { host: "lavalinkv4.serenetia.com",  port: 443,   password: "https://dsc.gg/cantina",  secure: true  },
+  { host: "lavalink.jirayu.net",      port: 13592, password: "youshallnotpass",         secure: false },
+];
+
+type LavalinkTrackInfo = {
+  identifier: string; // YouTube video ID
+  title: string;
+  author: string;
+  length: number;    // duration in milliseconds
+  uri: string;
+};
+
+/** Search public Lavalink nodes for a YouTube track matching `query`.
+ *  Returns the top result's info, or null if all nodes are unreachable. */
+async function findTrackViaLavalink(
+  query: string,
+): Promise<LavalinkTrackInfo | null> {
+  for (const node of LAVALINK_NODES) {
+    try {
+      const protocol = node.secure ? "https" : "http";
+      const url =
+        `${protocol}://${node.host}:${node.port}/v4/loadtracks?identifier=` +
+        encodeURIComponent(`ytsearch:${query}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const r = await fetch(url, {
+        headers: { Authorization: node.password },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!r.ok) continue;
+      const data = (await r.json()) as {
+        loadType: string;
+        data?: Array<{ info: LavalinkTrackInfo }>;
+      };
+      if (
+        data.loadType === "search" &&
+        Array.isArray(data.data) &&
+        data.data.length > 0
+      ) {
+        return data.data[0].info;
+      }
+    } catch {
+      // Node unreachable — try the next one
+    }
+  }
+  return null;
+}
+
+// In-memory cache: "<artist>::<title>" → { videoId, duration }. Persists for
+// the life of the server so repeat plays skip the Lavalink round-trip.
+type TrackCacheEntry = { videoId: string; duration: number };
+const trackCache = new Map<string, TrackCacheEntry>();
 const cacheKey = (artist: string, title: string) =>
   norm(artist) + "::" + norm(title);
 
-/** Resolve a YouTube videoId for the given query by scraping YouTube's
- *  public search page. No API key required. We pick the first videoId
- *  found in the response — for "<artist> <title> audio" queries this is
- *  reliably the official audio / topic upload. */
-async function findYouTubeVideo(query: string): Promise<string | null> {
-  const url =
-    "https://www.youtube.com/results?search_query=" +
-    encodeURIComponent(query);
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        // Skip the EU consent interstitial that otherwise replaces the
-        // search results with a consent page.
-        Cookie: "CONSENT=YES+1",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!r.ok) return null;
-    const html = await r.text();
-    const matches = html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
-    for (const m of matches) {
-      // Take the first unique id — that's the top result.
-      return m[1];
+// ─── Audio format cache ───────────────────────────────────────────────────────
+// Caches the direct YouTube CDN URL so we only call yt-dlp once per track.
+// YouTube CDN URLs expire in ~6 h — we evict after 4 h to stay safe.
+type AudioEntry = {
+  url: string;
+  mimeType: string;
+  contentLength: number;
+  expiry: number;
+};
+const audioCache = new Map<string, AudioEntry>();
+
+// Ongoing resolutions: prevents parallel yt-dlp calls for the same videoId.
+const resolutionInFlight = new Map<string, Promise<AudioEntry>>();
+
+async function resolveAudioUrl(videoId: string): Promise<AudioEntry> {
+  const cached = audioCache.get(videoId);
+  if (cached && Date.now() < cached.expiry) return cached;
+
+  // Deduplicate concurrent requests for the same video
+  const existing = resolutionInFlight.get(videoId);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<AudioEntry> => {
+    try {
+      // Let yt-dlp pick the best client automatically (it defaults to
+      // ANDROID_VR which doesn't need a PO Token and works from server IPs).
+      const { stdout } = await execFileAsync(
+        YTDLP,
+        [
+          "-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio",
+          "--get-url",
+          "--no-playlist",
+          "--quiet",
+          `https://www.youtube.com/watch?v=${videoId}`,
+        ],
+        { timeout: 30_000 },
+      );
+
+      // stdout is just the URL (warnings go to stderr when --quiet is active)
+      const url = stdout.trim().split(/\s+/).find((l) => l.startsWith("http"));
+      if (!url) throw new Error("yt-dlp returned no URL");
+
+      // The YouTube CDN URL embeds clen (content-length) and mime in its query
+      const parsed = new URL(url);
+      const clen = parseInt(parsed.searchParams.get("clen") ?? "0", 10);
+      const mimeRaw = parsed.searchParams.get("mime") ?? "";
+      const mimeType = mimeRaw || (url.includes("itag=140") ? "audio/mp4" : "audio/webm");
+
+      const entry: AudioEntry = {
+        url,
+        mimeType,
+        contentLength: clen,
+        expiry: Date.now() + 4 * 60 * 60 * 1000,
+      };
+      audioCache.set(videoId, entry);
+      return entry;
+    } finally {
+      resolutionInFlight.delete(videoId);
     }
-    return null;
-  } catch {
-    return null;
-  }
+  })();
+
+  resolutionInFlight.set(videoId, promise);
+  return promise;
 }
 
+// ─── Routes ──────────────────────────────────────────────────────────────────
+
 router.get("/preach/song", async (req, res) => {
-  // Up to N attempts: pick a random artist, find a synced song, find a
-  // YouTube video for it. If anything in that chain fails, try again with
-  // a different artist / track.
   const MAX_ARTIST_ATTEMPTS = 6;
   const MAX_TRACKS_PER_ARTIST = 4;
 
@@ -216,8 +321,6 @@ router.get("/preach/song", async (req, res) => {
       continue;
     }
 
-    // Random sample so we don't always pick the same first track for an
-    // artist on repeat lookups.
     const shuffled = [...candidates]
       .sort(() => Math.random() - 0.5)
       .slice(0, MAX_TRACKS_PER_ARTIST);
@@ -229,21 +332,33 @@ router.get("/preach/song", async (req, res) => {
       if (lyrics.length < 4) continue;
 
       const key = cacheKey(cand.artistName, cand.trackName);
-      let videoId = videoIdCache.get(key) ?? null;
-      if (!videoId) {
-        videoId = await findYouTubeVideo(
-          `${cand.artistName} ${cand.trackName} audio`,
+      let trackEntry = trackCache.get(key) ?? null;
+
+      if (!trackEntry) {
+        const trackInfo = await findTrackViaLavalink(
+          `${cand.artistName} ${cand.trackName}`,
         );
-        if (videoId) videoIdCache.set(key, videoId);
+        if (!trackInfo) continue;
+        trackEntry = {
+          videoId: trackInfo.identifier,
+          duration: Math.round(trackInfo.length / 1000),
+        };
+        trackCache.set(key, trackEntry);
       }
-      if (!videoId) continue;
 
       const artworkUrl = await fetchArtwork(cand.trackName, cand.artistName);
+
+      const videoId = trackEntry.videoId;
+
+      // Fire-and-forget: warm the audio URL cache so the first stream
+      // request returns immediately instead of waiting for yt-dlp.
+      resolveAudioUrl(videoId).catch(() => {});
 
       res.json({
         title: cand.trackName,
         artist: cand.artistName,
         videoId,
+        duration: trackEntry.duration,
         artworkUrl,
         lyrics,
       });
@@ -252,6 +367,83 @@ router.get("/preach/song", async (req, res) => {
   }
 
   res.status(503).json({ error: "Couldn't tune in to anything right now." });
+});
+
+/** Audio stream proxy.
+ *
+ *  GET /api/preach/stream/:videoId
+ *
+ *  Resolves the direct YouTube CDN URL via yt-dlp (Android client — no JS
+ *  cipher extraction needed), then proxies it including any Range header the
+ *  browser sends for seeking. This gives the <audio> element full native scrub
+ *  support: the seek bar fills in and seeking is instant.
+ *
+ *  The CDN URL is cached for 4 h; /preach/song pre-warms it so the first play
+ *  usually hits the cache.
+ */
+router.get("/preach/stream/:videoId", async (req, res) => {
+  const { videoId } = req.params;
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    res.status(400).json({ error: "Invalid videoId" });
+    return;
+  }
+
+  // Use a manual AbortController so we can cancel cleanly when the client
+  // disconnects — avoids unhandled 'error' events from AbortSignal.timeout.
+  const abort = new AbortController();
+  const connectTimeout = setTimeout(() => abort.abort(), 30_000);
+
+  try {
+    const fmt = await resolveAudioUrl(videoId);
+
+    const rangeHeader = req.headers["range"];
+    const upstream = await fetch(fmt.url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        ...(rangeHeader ? { Range: rangeHeader } : {}),
+      },
+      signal: abort.signal,
+    });
+
+    // Headers received — connection established, cancel the connect timeout.
+    clearTimeout(connectTimeout);
+
+    res.status(rangeHeader && upstream.status === 206 ? 206 : 200);
+    res.setHeader("Content-Type", fmt.mimeType);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "no-cache");
+
+    const cl = upstream.headers.get("content-length");
+    if (cl) res.setHeader("Content-Length", cl);
+    else if (fmt.contentLength > 0)
+      res.setHeader("Content-Length", fmt.contentLength);
+
+    const cr = upstream.headers.get("content-range");
+    if (cr) res.setHeader("Content-Range", cr);
+
+    // Convert the WHATWG ReadableStream → Node Readable and pipe to response.
+    // Listen for 'error' so Node doesn't throw if the client disconnects mid-stream.
+    const nodeStream = Readable.fromWeb(
+      upstream.body as import("stream/web").ReadableStream,
+    );
+    nodeStream.on("error", (err) => {
+      req.log.warn({ err, videoId }, "Stream error (client likely disconnected)");
+      if (!res.headersSent) res.status(502).json({ error: "Couldn't stream audio." });
+      else res.end();
+    });
+    nodeStream.pipe(res);
+    req.on("close", () => {
+      abort.abort();
+      nodeStream.destroy();
+    });
+  } catch (err) {
+    clearTimeout(connectTimeout);
+    req.log.error({ err, videoId }, "Audio stream failed");
+    if (!res.headersSent) {
+      res.status(502).json({ error: "Couldn't stream audio." });
+    }
+  }
 });
 
 export default router;
