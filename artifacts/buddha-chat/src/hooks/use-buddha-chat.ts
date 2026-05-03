@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { playStreamChime } from "@/lib/sound";
 
 export type BuddhaState =
   | "idle"
@@ -31,6 +32,8 @@ export function useBuddhaChat() {
   const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overrideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Throttle stream chimes: max one every ~120 ms
+  const lastChimeRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -182,6 +185,12 @@ export function useBuddhaChat() {
               ensureBuddhaMessage();
               accumulated += data.text;
               updateBuddhaContent(accumulated);
+              // Windchime as text streams in — throttled to ~8× per second
+              const now = Date.now();
+              if (now - lastChimeRef.current > 120) {
+                lastChimeRef.current = now;
+                playStreamChime();
+              }
             } else if (data.type === "refused") {
               refused = true;
               ensureBuddhaMessage();

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { playTypeChime } from "@/lib/sound";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -31,6 +32,11 @@ export function ChatInput({ onSendMessage, onTypingChange, disabled }: ChatInput
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+      return;
+    }
+    // Windchime on every printable keystroke (skip modifiers, arrows, etc.)
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+      playTypeChime();
     }
   };
 
