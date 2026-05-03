@@ -50,37 +50,36 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
   const historyRef = useRef<PreachSong[]>([]);
   const HISTORY_MAX = 20;
   const queuedSongRef = useRef<PreachSong | null>(null);
-  // Pre-fetched next song (hidden state) — loaded while current plays for instant skip
-  const prefetchRef = useRef<PreachSong | null>(null);
+  // Pre-fetched queue: keep 2 songs ahead for instant double-skip
+  const prefetchQueueRef = useRef<PreachSong[]>([]);
   // Abort controller for pre-fetch requests
   const prefetchAbortRef = useRef<AbortController | null>(null);
-  // Track if we've started pre-fetching to avoid multiple parallel fetches
-  const prefetchingRef = useRef(false);
+  // Track count of pre-fetches in flight to avoid over-fetching
+  const prefetchCountRef = useRef(0);
 
-  // ── Pre-fetch the next song in the background ──────────────────────────────
+  // ── Pre-fetch songs to maintain a queue of 2 ahead ─────────────────────────────
   const startPrefetch = useCallback(() => {
-    if (prefetchingRef.current || !enabled) return;
-    prefetchingRef.current = true;
-    if (prefetchAbortRef.current) prefetchAbortRef.current.abort();
-    const controller = new AbortController();
-    prefetchAbortRef.current = controller;
+    if (!enabled || prefetchCountRef.current >= 2) return;
+    const needed = 2 - prefetchQueueRef.current.length;
+    if (needed <= 0) return;
 
-    fetch("/api/preach/song", { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(`status ${r.status}`);
-        return r.json() as Promise<PreachSong>;
-      })
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          prefetchRef.current = data;
-        }
-      })
-      .catch(() => {
-        // Pre-fetch failure is silent — fall back to synchronous fetch on skip
-      })
-      .finally(() => {
-        prefetchingRef.current = false;
-      });
+    for (let i = 0; i < needed; i++) {
+      prefetchCountRef.current++;
+      fetch("/api/preach/song")
+        .then((r) => {
+          if (!r.ok) throw new Error(`status ${r.status}`);
+          return r.json() as Promise<PreachSong>;
+        })
+        .then((data) => {
+          prefetchQueueRef.current.push(data);
+        })
+        .catch(() => {
+          // Pre-fetch failure is silent
+        })
+        .finally(() => {
+          prefetchCountRef.current--;
+        });
+    }
   }, [enabled]);
 
   // ── Fetch a new song whenever enabled flips on, or skip is called ──
@@ -93,16 +92,15 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
       setDuration(0);
       historyRef.current = [];
       queuedSongRef.current = null;
-      prefetchRef.current = null;
-      if (prefetchAbortRef.current) prefetchAbortRef.current.abort();
+      prefetchQueueRef.current = [];
+      prefetchCountRef.current = 0;
       return;
     }
     let cancelled = false;
 
-    // Check if the pre-fetched song is ready (instant use)
-    const prefetched = prefetchRef.current;
+    // Check if the pre-fetched queue has a song (instant use)
+    const prefetched = prefetchQueueRef.current.shift();
     if (prefetched) {
-      prefetchRef.current = null;
       setSong((prev) => {
         if (prev && prev.videoId !== prefetched.videoId) {
           historyRef.current = [
@@ -116,7 +114,7 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
       setCurrentTime(0);
       setDuration(prefetched.duration);
       setSyncOffset(loadOffset(prefetched.videoId));
-      // Queue the next pre-fetch immediately
+      // Refill the queue immediately
       setTimeout(startPrefetch, 0);
       return;
     }
@@ -134,7 +132,7 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
       return;
     }
 
-    // Fetch a fresh song
+    // Fetch a fresh song (synchronously, not from pre-fetch queue)
     setStatus("loading");
     fetch("/api/preach/song")
       .then((r) => {
@@ -156,7 +154,7 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
         setCurrentTime(0);
         setDuration(data.duration);
         setSyncOffset(loadOffset(data.videoId));
-        // Start pre-fetching the next song once this one is loaded
+        // Start pre-fetching ahead once this one is loaded
         setTimeout(startPrefetch, 0);
       })
       .catch((err) => {
