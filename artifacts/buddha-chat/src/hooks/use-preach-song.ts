@@ -50,6 +50,38 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
   const historyRef = useRef<PreachSong[]>([]);
   const HISTORY_MAX = 20;
   const queuedSongRef = useRef<PreachSong | null>(null);
+  // Pre-fetched next song (hidden state) — loaded while current plays for instant skip
+  const prefetchRef = useRef<PreachSong | null>(null);
+  // Abort controller for pre-fetch requests
+  const prefetchAbortRef = useRef<AbortController | null>(null);
+  // Track if we've started pre-fetching to avoid multiple parallel fetches
+  const prefetchingRef = useRef(false);
+
+  // ── Pre-fetch the next song in the background ──────────────────────────────
+  const startPrefetch = useCallback(() => {
+    if (prefetchingRef.current || !enabled) return;
+    prefetchingRef.current = true;
+    if (prefetchAbortRef.current) prefetchAbortRef.current.abort();
+    const controller = new AbortController();
+    prefetchAbortRef.current = controller;
+
+    fetch("/api/preach/song", { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        return r.json() as Promise<PreachSong>;
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          prefetchRef.current = data;
+        }
+      })
+      .catch(() => {
+        // Pre-fetch failure is silent — fall back to synchronous fetch on skip
+      })
+      .finally(() => {
+        prefetchingRef.current = false;
+      });
+  }, [enabled]);
 
   // ── Fetch a new song whenever enabled flips on, or skip is called ──
   useEffect(() => {
@@ -61,10 +93,35 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
       setDuration(0);
       historyRef.current = [];
       queuedSongRef.current = null;
+      prefetchRef.current = null;
+      if (prefetchAbortRef.current) prefetchAbortRef.current.abort();
       return;
     }
     let cancelled = false;
 
+    // Check if the pre-fetched song is ready (instant use)
+    const prefetched = prefetchRef.current;
+    if (prefetched) {
+      prefetchRef.current = null;
+      setSong((prev) => {
+        if (prev && prev.videoId !== prefetched.videoId) {
+          historyRef.current = [
+            ...historyRef.current.slice(-(HISTORY_MAX - 1)),
+            prev,
+          ];
+        }
+        return prefetched;
+      });
+      setCurrentLine("");
+      setCurrentTime(0);
+      setDuration(prefetched.duration);
+      setSyncOffset(loadOffset(prefetched.videoId));
+      // Queue the next pre-fetch immediately
+      setTimeout(startPrefetch, 0);
+      return;
+    }
+
+    // Check if user queued a song (e.g., via history "previous")
     const queued = queuedSongRef.current;
     if (queued) {
       queuedSongRef.current = null;
@@ -73,9 +130,11 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
       setCurrentTime(0);
       setDuration(queued.duration);
       setSyncOffset(loadOffset(queued.videoId));
+      setTimeout(startPrefetch, 0);
       return;
     }
 
+    // Fetch a fresh song
     setStatus("loading");
     fetch("/api/preach/song")
       .then((r) => {
@@ -97,6 +156,8 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
         setCurrentTime(0);
         setDuration(data.duration);
         setSyncOffset(loadOffset(data.videoId));
+        // Start pre-fetching the next song once this one is loaded
+        setTimeout(startPrefetch, 0);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -106,7 +167,7 @@ export function usePreachSong(enabled: boolean, started: boolean = true) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, songNonce]);
+  }, [enabled, songNonce, startPrefetch]);
 
   // ── Create HTML5 audio element once we have a song and user has started ──
   // The stream endpoint supports byte-range requests, so the browser handles
