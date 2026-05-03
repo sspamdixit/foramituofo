@@ -20,6 +20,7 @@ Rules:
 
 type ChatRole = "user" | "buddha";
 type IncomingMessage = { role: ChatRole; content: string };
+type CurrentSong = { title: string; artist: string; currentLyric?: string };
 
 const replitGeminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
 const replitGeminiBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
@@ -41,6 +42,7 @@ router.post("/chat", async (req, res) => {
   const body = req.body as {
     history?: IncomingMessage[];
     message?: string;
+    currentSong?: CurrentSong;
   };
 
   const message = body.message?.trim();
@@ -106,13 +108,22 @@ router.post("/chat", async (req, res) => {
     );
   };
 
+  let systemInstruction = SYSTEM_PROMPT;
+  if (body.currentSong) {
+    const { title, artist, currentLyric } = body.currentSong;
+    systemInstruction +=
+      `\n\nCURRENT SONG: "${title}" by ${artist}.` +
+      (currentLyric ? ` Currently playing lyric: "${currentLyric}".` : "") +
+      `\n\nYou can naturally weave the song title, artist, or lyric into your wisdom when it genuinely connects to what the user is saying. Only do this if it feels organic — never force it.`;
+  }
+
   for (const model of modelChain) {
     try {
       stream = await ai.models.generateContentStream({
         model,
         contents,
         config: {
-          systemInstruction: SYSTEM_PROMPT,
+          systemInstruction,
           temperature: 0.85,
           maxOutputTokens: 8192,
         },

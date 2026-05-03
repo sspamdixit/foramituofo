@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Share2 } from "lucide-react";
 import { useBuddhaChat, type BuddhaState } from "@/hooks/use-buddha-chat";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { useVibe } from "@/hooks/use-vibe";
 import { usePreachSong } from "@/hooks/use-preach-song";
+import { useGamification } from "@/hooks/use-gamification";
 import { BuddhaSprite } from "@/components/buddha-sprite";
 import { ChatInput } from "@/components/chat-input";
 import { PreachPlayer } from "@/components/preach-player";
@@ -11,6 +13,10 @@ import { GreetingOverlay } from "@/components/greeting-overlay";
 import { SketchBubble } from "@/components/sketch-bubble";
 import { TalismanCard } from "@/components/talisman-card";
 import { VibeBackground, getVibeTextColor, getVibeAccents } from "@/components/vibe-background";
+import { AchievementToast } from "@/components/achievement-toast";
+import { LyricDecodeModal } from "@/components/lyric-decode-modal";
+import { VibeSnapshot } from "@/components/vibe-snapshot";
+import { VibeChallengerBanner } from "@/components/vibe-challenge-banner";
 import type { CSSProperties } from "react";
 import { playChime } from "@/lib/sound";
 import { cn } from "@/lib/utils";
@@ -157,6 +163,21 @@ export default function Home() {
   const [showFlash, setShowFlash] = useState(false);
   const [talismanText, setTalismanText] = useState<string | null>(null);
 
+  const [decodingLyric, setDecodingLyric] = useState<string | null>(null);
+  const [showSnapshot, setShowSnapshot] = useState(false);
+
+  const {
+    streak,
+    newBadge,
+    challenge,
+    onChatSent,
+    onLyricDecoded,
+    onSnapshotTaken,
+    onSongSkipped,
+    onVibeChanged,
+    dismissChallenge,
+  } = useGamification();
+
   const reactionIdxRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,17 +303,23 @@ export default function Home() {
 
   const handleSend = useCallback(
     (text: string) => {
-      // Clear any reaction/idle bubble immediately when user speaks.
       setOverride(null);
       if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current);
-
-      if (/\bbless\b/i.test(text)) {
-        triggerTalisman();
-      }
-      sendMessage(text);
+      if (/\bbless\b/i.test(text)) triggerTalisman();
+      onChatSent(text);
+      sendMessage(text, preachSong ? {
+        title: preachSong.title,
+        artist: preachSong.artist,
+        currentLyric: preachLine || undefined,
+      } : undefined);
     },
-    [sendMessage, triggerTalisman],
+    [sendMessage, triggerTalisman, onChatSent, preachSong, preachLine],
   );
+
+  const handleSkip = useCallback(() => {
+    onSongSkipped();
+    skipSong();
+  }, [skipSong, onSongSkipped]);
 
   // When user starts typing a new message, dissolve the old bubble.
   const handleTypingChange = useCallback((typing: boolean) => {
@@ -342,6 +369,16 @@ export default function Home() {
   const vibe = useVibe(messages, musicText);
   const vibeTextColor = getVibeTextColor(vibe);
   const vibeAccents = getVibeAccents(vibe);
+
+  // Track vibe changes for gamification
+  const prevVibeRef = useRef(vibe);
+  useEffect(() => {
+    if (prevVibeRef.current !== vibe) {
+      prevVibeRef.current = vibe;
+      onVibeChanged(vibe);
+    }
+  }, [vibe, onVibeChanged]);
+
   const wrapperStyle: CSSProperties = {
     // Exposed as CSS vars so any descendant — chat input, credits, music
     // player progress / glow — can pick colors that contrast the current
@@ -407,8 +444,15 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4, transition: { duration: 0.25 } }}
               transition={{ duration: 0.4, ease: "easeOut" }}
+              className="pointer-events-auto cursor-pointer group"
+              onClick={() => setDecodingLyric(preachLine)}
+              title="Tap to decode this lyric"
             >
               <StaticThought text={preachLine} />
+              <p className="text-center text-[10px] mt-0.5 select-none opacity-0 group-hover:opacity-60 transition-opacity"
+                style={{ color: "var(--vibe-text)" }}>
+                tap to decode
+              </p>
             </motion.div>
           )}
           {showHummingBubble && (
@@ -467,6 +511,37 @@ export default function Home() {
         className="absolute inset-x-0 bottom-0 z-30 px-4 md:px-6 flex flex-col items-stretch gap-2"
         style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
       >
+        {/* Vibe challenge banner */}
+        <VibeChallengerBanner challenge={challenge} onDismiss={dismissChallenge} />
+
+        {/* Streak + Share row */}
+        <div className="flex items-center justify-between mx-auto w-full max-w-3xl px-1">
+          <div className="flex items-center gap-1.5">
+            {streak >= 2 && (
+              <span className="text-[11px] flex items-center gap-1 select-none"
+                style={{ color: "var(--vibe-text)", opacity: 0.55 }}>
+                🔥 {streak}-day streak
+              </span>
+            )}
+          </div>
+          {preachSong && (
+            <button
+              type="button"
+              onClick={() => { setShowSnapshot(true); onSnapshotTaken(); }}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
+              style={{
+                color: "var(--vibe-text)",
+                background: "rgba(0,0,0,0.12)",
+                border: "1px solid rgba(0,0,0,0.1)",
+                opacity: 0.7,
+              }}
+            >
+              <Share2 className="w-3 h-3" />
+              Share Vibe
+            </button>
+          )}
+        </div>
+
         <PreachPlayer
           song={preachSong}
           status={preachStatus}
@@ -474,7 +549,7 @@ export default function Home() {
           currentTime={preachCurrentTime}
           duration={preachDuration}
           onTogglePlay={togglePreachPlay}
-          onSkip={skipSong}
+          onSkip={handleSkip}
           onPrevious={previousSong}
           onSeekBy={seekPreachBy}
           onNudgeSync={nudgePreachSync}
@@ -537,6 +612,30 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      {/* Achievement toast — floats above everything */}
+      <AchievementToast badge={newBadge} />
+
+      {/* Lyric decode modal */}
+      {decodingLyric && (
+        <LyricDecodeModal
+          lyric={decodingLyric}
+          song={preachSong}
+          onClose={() => setDecodingLyric(null)}
+          onDecoded={onLyricDecoded}
+        />
+      )}
+
+      {/* Vibe snapshot / share modal */}
+      {showSnapshot && (
+        <VibeSnapshot
+          vibe={vibe}
+          song={preachSong}
+          currentLyric={preachLine}
+          lastBuddhaMessage={latestBuddha?.content ?? ""}
+          onClose={() => setShowSnapshot(false)}
+        />
+      )}
     </div>
   );
 }

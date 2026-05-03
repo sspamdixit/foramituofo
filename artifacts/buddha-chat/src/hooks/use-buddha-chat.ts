@@ -82,7 +82,10 @@ export function useBuddhaChat() {
   );
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (
+      content: string,
+      songContext?: { title: string; artist: string; currentLyric?: string },
+    ) => {
       const trimmed = content.trim();
       if (!trimmed) return;
 
@@ -148,6 +151,7 @@ export function useBuddhaChat() {
           body: JSON.stringify({
             history: historyForRequest,
             message: trimmed,
+            ...(songContext ? { currentSong: songContext } : {}),
           }),
           signal: controller.signal,
         });
